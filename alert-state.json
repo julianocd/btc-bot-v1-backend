@@ -1,0 +1,41 @@
+{
+  "symbol": "BTCUSDT",
+  "bias": "WATCHLIST_BUY",
+  "timeframeContext": [
+    "4h",
+    "1h"
+  ],
+  "entry": 81560,
+  "stopLoss": 80336.6,
+  "takeProfit": 84006.8,
+  "riskReward": 2,
+  "confidence": 70,
+  "strength": "MEDIUM",
+  "indicators": {
+    "4h": {
+      "candles": 27,
+      "trend": "NEUTRAL",
+      "rsi14": 54,
+      "macdState": "BULLISH",
+      "macdLine": 425.4697,
+      "signalLine": 420.9109,
+      "histogram": 4.5588,
+      "volumeState": "WEAK",
+      "confidence": 40,
+      "strength": "LOW"
+    },
+    "1h": {
+      "candles": 106,
+      "trend": "BULLISH",
+      "rsi14": 56.95,
+      "macdState": "BULLISH",
+      "macdLine": 248.6981,
+      "signalLine": 207.7022,
+      "histogram": 40.9959,
+      "volumeState": "STRONG",
+      "confidence": 100,
+      "strength": "HIGH"
+    }
+  },
+  "note": "4h=NEUTRAL | 1h=BULLISH | MACD 4h=BULLISH | MACD 1h=BULLISH | VOL 4h=WEAK | VOL 1h=STRONG | RSI 4h=54.0 | RSI 1h=57.0 | CONF=70"
+}
