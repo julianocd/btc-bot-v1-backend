@@ -259,107 +259,110 @@
     </div>
   </div>
 
-  <script>
-    function formatPrice(value) {
-      if (value == null) return '--';
-      return Number(value).toLocaleString('pt-BR', {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2
-      });
-    }
+ <script>
+  function formatPrice(value) {
+    if (value == null) return '--';
+    return Number(value).toLocaleString('pt-BR', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+  }
 
-    function confidenceClass(value) {
-      const n = Number(value || 0);
-      if (n >= 70) return 'ok';
-      if (n >= 50) return 'warn';
-      return 'danger';
-    }
+  function confidenceClass(value) {
+    const n = Number(value || 0);
+    if (n >= 70) return 'ok';
+    if (n >= 50) return 'warn';
+    return 'danger';
+  }
 
-    function trendClass(value) {
-      if (value === 'BULLISH') return 'ok';
-      if (value === 'BEARISH') return 'danger';
-      return 'neutral';
-    }
+  function trendClass(value) {
+    if (value === 'BULLISH') return 'ok';
+    if (value === 'BEARISH') return 'danger';
+    return 'neutral';
+  }
 
-    function biasClass(value) {
-      if (value && value.includes('BUY')) return 'ok';
-      if (value && value.includes('SELL')) return 'danger';
-      if (value === 'BULLISH') return 'ok';
-      if (value === 'BEARISH') return 'danger';
-      return 'warn';
-    }
+  function biasClass(value) {
+    if (value && value.includes('BUY')) return 'ok';
+    if (value && value.includes('SELL')) return 'danger';
+    if (value === 'BULLISH') return 'ok';
+    if (value === 'BEARISH') return 'danger';
+    return 'warn';
+  }
 
-    async function loadDashboard() {
-      try {
-        const healthRes = await fetch('/health');
-        const health = await healthRes.json();
+  async function loadDashboard() {
+    try {
+      const now = new Date();
 
-        const backendStatus = document.getElementById('backendStatus');
-        backendStatus.textContent = health.ok ? 'Online ✅' : 'Offline ❌';
-        backendStatus.className = `value ${health.ok ? 'ok' : 'danger'}`;
-        document.getElementById('backendText').textContent =
-          health.ok ? 'API respondendo normalmente' : 'Falha na API';
+      const healthRes = await fetch('/health?_ts=' + now.getTime());
+      const health = await healthRes.json();
 
-        const alertRes = await fetch('/market/alerts');
-        const alertData = await alertRes.json();
+      const backendStatus = document.getElementById('backendStatus');
+      backendStatus.textContent = health.ok ? 'Online ✅' : 'Offline ❌';
+      backendStatus.className = `value ${health.ok ? 'ok' : 'danger'}`;
+      document.getElementById('backendText').textContent =
+        `API respondendo normalmente · ${now.toLocaleTimeString('pt-BR')}`;
 
-        if (!alertData.ok || !alertData.alert) {
-          document.getElementById('noteText').textContent = 'Nenhum alerta encontrado.';
-          document.getElementById('statusLine').textContent = 'A rota respondeu sem alerta válido.';
-          document.getElementById('alertJson').textContent = JSON.stringify(alertData, null, 2);
-          return;
-        }
+      const alertRes = await fetch('/market/alerts?_ts=' + now.getTime());
+      const alertData = await alertRes.json();
 
-        const alert = alertData.alert;
-        const tf4h = alert.indicators && alert.indicators['4h'] ? alert.indicators['4h'] : {};
-        const tf1h = alert.indicators && alert.indicators['1h'] ? alert.indicators['1h'] : {};
-
-        document.getElementById('symbol').textContent = alert.symbol ?? '--';
-
-        const biasEl = document.getElementById('bias');
-        biasEl.textContent = alert.bias ?? '--';
-        biasEl.className = `value ${biasClass(alert.bias)}`;
-
-        const confidenceEl = document.getElementById('confidence');
-        confidenceEl.textContent = alert.confidence != null ? `${alert.confidence}%` : '--';
-        confidenceEl.className = `value ${confidenceClass(alert.confidence)}`;
-
-        document.getElementById('strength').textContent = alert.strength ?? '--';
-        document.getElementById('riskReward').textContent = alert.riskReward ?? '--';
-        document.getElementById('entry').textContent = formatPrice(alert.entry);
-        document.getElementById('stopLoss').textContent = formatPrice(alert.stopLoss);
-        document.getElementById('takeProfit').textContent = formatPrice(alert.takeProfit);
-        document.getElementById('lastUpdate').textContent = new Date().toLocaleString('pt-BR');
-
-        const trend4hEl = document.getElementById('trend4h');
-        trend4hEl.textContent = tf4h.trend ?? '--';
-        trend4hEl.className = `value ${trendClass(tf4h.trend)}`;
-        document.getElementById('trend4hDetails').textContent =
-          `RSI ${tf4h.rsi14 ?? '--'} | MACD ${tf4h.macdState ?? '--'} | Volume ${tf4h.volumeState ?? '--'}`;
-
-        const trend1hEl = document.getElementById('trend1h');
-        trend1hEl.textContent = tf1h.trend ?? '--';
-        trend1hEl.className = `value ${trendClass(tf1h.trend)}`;
-        document.getElementById('trend1hDetails').textContent =
-          `RSI ${tf1h.rsi14 ?? '--'} | MACD ${tf1h.macdState ?? '--'} | Volume ${tf1h.volumeState ?? '--'}`;
-
-        document.getElementById('noteText').textContent = alert.note ?? 'Sem observações.';
+      if (!alertData.ok || !alertData.alert) {
+        document.getElementById('noteText').textContent = 'Nenhum alerta encontrado.';
         document.getElementById('statusLine').textContent =
-          `Atualização automática ligada · Contexto: ${(alert.timeframeContext || []).join(' / ') || '--'}`;
-
-        document.getElementById('alertJson').textContent = JSON.stringify(alert, null, 2);
-      } catch (error) {
-        document.getElementById('backendStatus').textContent = 'Erro ❌';
-        document.getElementById('backendStatus').className = 'value danger';
-        document.getElementById('backendText').textContent = 'Falha ao carregar /health';
-        document.getElementById('noteText').textContent = 'Erro ao carregar dados do painel.';
-        document.getElementById('statusLine').textContent = error.message;
-        document.getElementById('alertJson').textContent = error.stack || error.message;
+          `Sem alerta válido · Última leitura: ${now.toLocaleTimeString('pt-BR')}`;
+        document.getElementById('alertJson').textContent = JSON.stringify(alertData, null, 2);
+        return;
       }
-    }
 
-    loadDashboard();
-    setInterval(loadDashboard, 15000);
-  </script>
+      const alert = alertData.alert;
+      const tf4h = alert.indicators && alert.indicators['4h'] ? alert.indicators['4h'] : {};
+      const tf1h = alert.indicators && alert.indicators['1h'] ? alert.indicators['1h'] : {};
+
+      document.getElementById('symbol').textContent = alert.symbol ?? '--';
+
+      const biasEl = document.getElementById('bias');
+      biasEl.textContent = alert.bias ?? '--';
+      biasEl.className = `value ${biasClass(alert.bias)}`;
+
+      const confidenceEl = document.getElementById('confidence');
+      confidenceEl.textContent = alert.confidence != null ? `${alert.confidence}%` : '--';
+      confidenceEl.className = `value ${confidenceClass(alert.confidence)}`;
+
+      document.getElementById('strength').textContent = alert.strength ?? '--';
+      document.getElementById('riskReward').textContent = alert.riskReward ?? '--';
+      document.getElementById('entry').textContent = formatPrice(alert.entry);
+      document.getElementById('stopLoss').textContent = formatPrice(alert.stopLoss);
+      document.getElementById('takeProfit').textContent = formatPrice(alert.takeProfit);
+      document.getElementById('lastUpdate').textContent = now.toLocaleString('pt-BR');
+
+      const trend4hEl = document.getElementById('trend4h');
+      trend4hEl.textContent = tf4h.trend ?? '--';
+      trend4hEl.className = `value ${trendClass(tf4h.trend)}`;
+      document.getElementById('trend4hDetails').textContent =
+        `RSI ${tf4h.rsi14 ?? '--'} | MACD ${tf4h.macdState ?? '--'} | Volume ${tf4h.volumeState ?? '--'}`;
+
+      const trend1hEl = document.getElementById('trend1h');
+      trend1hEl.textContent = tf1h.trend ?? '--';
+      trend1hEl.className = `value ${trendClass(tf1h.trend)}`;
+      document.getElementById('trend1hDetails').textContent =
+        `RSI ${tf1h.rsi14 ?? '--'} | MACD ${tf1h.macdState ?? '--'} | Volume ${tf1h.volumeState ?? '--'}`;
+
+      document.getElementById('noteText').textContent = alert.note ?? 'Sem observações.';
+      document.getElementById('statusLine').textContent =
+        `Atualização automática ligada · Última leitura: ${now.toLocaleTimeString('pt-BR')} · Contexto: ${(alert.timeframeContext || []).join(' / ') || '--'}`;
+
+      document.getElementById('alertJson').textContent = JSON.stringify(alert, null, 2);
+    } catch (error) {
+      document.getElementById('backendStatus').textContent = 'Erro ❌';
+      document.getElementById('backendStatus').className = 'value danger';
+      document.getElementById('backendText').textContent = 'Falha ao carregar /health';
+      document.getElementById('noteText').textContent = 'Erro ao carregar dados do painel.';
+      document.getElementById('statusLine').textContent = error.message;
+      document.getElementById('alertJson').textContent = error.stack || error.message;
+    }
+  }
+
+  loadDashboard();
+  setInterval(loadDashboard, 15000);
+</script>
 </body>
 </html>
