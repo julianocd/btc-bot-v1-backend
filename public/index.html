@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BTC Bot Dashboard</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
       font-family: Arial, sans-serif;
@@ -14,164 +18,332 @@
     }
 
     .container {
-      max-width: 900px;
+      max-width: 1100px;
       margin: 0 auto;
     }
 
     h1 {
-      margin-bottom: 8px;
+      margin: 0 0 8px;
+      font-size: 32px;
     }
 
     .subtitle {
+      margin: 0 0 24px;
       color: #94a3b8;
+    }
+
+    .topbar {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
       margin-bottom: 24px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      background: #2563eb;
+      color: #fff;
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #1d4ed8;
     }
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 16px;
-      margin-bottom: 24px;
+      margin-bottom: 16px;
     }
 
     .card {
       background: #1e293b;
-      border-radius: 12px;
-      padding: 16px;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 18px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.25);
     }
 
     .label {
       font-size: 12px;
       text-transform: uppercase;
+      letter-spacing: 0.08em;
       color: #94a3b8;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
 
     .value {
-      font-size: 22px;
+      font-size: 24px;
       font-weight: bold;
+      line-height: 1.2;
     }
 
-    .ok {
-      color: #22c55e;
+    .small {
+      font-size: 14px;
+      color: #cbd5e1;
+      margin-top: 8px;
     }
 
-    .warn {
-      color: #facc15;
+    .ok { color: #22c55e; }
+    .warn { color: #facc15; }
+    .danger { color: #ef4444; }
+    .neutral { color: #38bdf8; }
+
+    .wide {
+      margin-top: 16px;
     }
 
-    .danger {
-      color: #ef4444;
-    }
-
-    button {
-      background: #2563eb;
-      color: white;
-      border: 0;
-      padding: 12px 16px;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-bottom: 24px;
+    .note {
+      background: #111827;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 18px;
+      margin-top: 16px;
+      line-height: 1.6;
     }
 
     pre {
+      margin: 0;
       white-space: pre-wrap;
       word-break: break-word;
-      background: #0b1220;
+      background: #020617;
+      border: 1px solid #1e293b;
       padding: 16px;
       border-radius: 12px;
       overflow-x: auto;
+      color: #cbd5e1;
+    }
+
+    .status-line {
+      margin-top: 8px;
+      color: #94a3b8;
+      font-size: 14px;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 16px;
+      }
+
+      h1 {
+        font-size: 26px;
+      }
+
+      .value {
+        font-size: 20px;
+      }
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>BTC Bot Dashboard</h1>
-    <p class="subtitle">Painel inicial dos alertas do bot</p>
+    <div class="topbar">
+      <div>
+        <h1>BTC Bot Dashboard</h1>
+        <p class="subtitle">Painel do último alerta gerado pelo bot</p>
+      </div>
 
-    <button onclick="loadDashboard()">Atualizar painel</button>
+      <div class="actions">
+        <button onclick="loadDashboard()">Atualizar painel</button>
+      </div>
+    </div>
 
     <div class="grid">
       <div class="card">
         <div class="label">Status backend</div>
         <div class="value" id="backendStatus">Carregando...</div>
+        <div class="small" id="backendText">Consultando /health</div>
       </div>
 
       <div class="card">
         <div class="label">Símbolo</div>
         <div class="value" id="symbol">--</div>
+        <div class="small">Par monitorado</div>
       </div>
 
       <div class="card">
         <div class="label">Bias</div>
         <div class="value" id="bias">--</div>
+        <div class="small">Direção atual do sinal</div>
       </div>
 
       <div class="card">
         <div class="label">Confiança</div>
         <div class="value" id="confidence">--</div>
+        <div class="small">Pontuação do sinal</div>
       </div>
 
       <div class="card">
         <div class="label">Força</div>
         <div class="value" id="strength">--</div>
+        <div class="small">Qualidade do movimento</div>
       </div>
 
       <div class="card">
-        <div class="label">Último alerta</div>
+        <div class="label">Risco / Retorno</div>
+        <div class="value" id="riskReward">--</div>
+        <div class="small">R/R do setup</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Entry</div>
+        <div class="value" id="entry">--</div>
+        <div class="small">Preço de entrada</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Stop Loss</div>
+        <div class="value" id="stopLoss">--</div>
+        <div class="small">Proteção do setup</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Take Profit</div>
+        <div class="value" id="takeProfit">--</div>
+        <div class="small">Alvo projetado</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Atualizado em</div>
         <div class="value" id="lastUpdate">--</div>
+        <div class="small">Horário local do painel</div>
       </div>
     </div>
 
-    <div class="card">
-      <div class="label">JSON do último alerta</div>
+    <div class="grid wide">
+      <div class="card">
+        <div class="label">Tendência 4h</div>
+        <div class="value" id="trend4h">--</div>
+        <div class="small" id="trend4hDetails">--</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Tendência 1h</div>
+        <div class="value" id="trend1h">--</div>
+        <div class="small" id="trend1hDetails">--</div>
+      </div>
+    </div>
+
+    <div class="note">
+      <div class="label">Resumo do alerta</div>
+      <div id="noteText">Carregando...</div>
+      <div class="status-line" id="statusLine">Aguardando dados...</div>
+    </div>
+
+    <div class="note">
+      <div class="label">JSON bruto</div>
       <pre id="alertJson">Carregando...</pre>
     </div>
   </div>
 
   <script>
+    function formatPrice(value) {
+      if (value == null) return '--';
+      return Number(value).toLocaleString('pt-BR', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+      });
+    }
+
+    function confidenceClass(value) {
+      const n = Number(value || 0);
+      if (n >= 70) return 'ok';
+      if (n >= 50) return 'warn';
+      return 'danger';
+    }
+
+    function trendClass(value) {
+      if (value === 'BULLISH') return 'ok';
+      if (value === 'BEARISH') return 'danger';
+      return 'neutral';
+    }
+
+    function biasClass(value) {
+      if (value && value.includes('BUY')) return 'ok';
+      if (value && value.includes('SELL')) return 'danger';
+      if (value === 'BULLISH') return 'ok';
+      if (value === 'BEARISH') return 'danger';
+      return 'warn';
+    }
+
     async function loadDashboard() {
       try {
         const healthRes = await fetch('/health');
         const health = await healthRes.json();
 
-        document.getElementById('backendStatus').textContent =
-          health.ok ? 'Online ✅' : 'Offline ❌';
-        document.getElementById('backendStatus').className =
-          `value ${health.ok ? 'ok' : 'danger'}`;
+        const backendStatus = document.getElementById('backendStatus');
+        backendStatus.textContent = health.ok ? 'Online ✅' : 'Offline ❌';
+        backendStatus.className = `value ${health.ok ? 'ok' : 'danger'}`;
+        document.getElementById('backendText').textContent =
+          health.ok ? 'API respondendo normalmente' : 'Falha na API';
 
         const alertRes = await fetch('/market/alerts');
         const alertData = await alertRes.json();
 
         if (!alertData.ok || !alertData.alert) {
-          document.getElementById('alertJson').textContent =
-            JSON.stringify(alertData, null, 2);
+          document.getElementById('noteText').textContent = 'Nenhum alerta encontrado.';
+          document.getElementById('statusLine').textContent = 'A rota respondeu sem alerta válido.';
+          document.getElementById('alertJson').textContent = JSON.stringify(alertData, null, 2);
           return;
         }
 
         const alert = alertData.alert;
+        const tf4h = alert.indicators && alert.indicators['4h'] ? alert.indicators['4h'] : {};
+        const tf1h = alert.indicators && alert.indicators['1h'] ? alert.indicators['1h'] : {};
 
         document.getElementById('symbol').textContent = alert.symbol ?? '--';
-        document.getElementById('bias').textContent = alert.bias ?? '--';
-        document.getElementById('confidence').textContent =
-          alert.confidence != null ? `${alert.confidence}%` : '--';
-        document.getElementById('strength').textContent = alert.strength ?? '--';
-        document.getElementById('lastUpdate').textContent =
-          new Date().toLocaleString('pt-BR');
+
+        const biasEl = document.getElementById('bias');
+        biasEl.textContent = alert.bias ?? '--';
+        biasEl.className = `value ${biasClass(alert.bias)}`;
 
         const confidenceEl = document.getElementById('confidence');
-        const confidenceValue = Number(alert.confidence ?? 0);
+        confidenceEl.textContent = alert.confidence != null ? `${alert.confidence}%` : '--';
+        confidenceEl.className = `value ${confidenceClass(alert.confidence)}`;
 
-        confidenceEl.className =
-          `value ${confidenceValue >= 70 ? 'ok' : confidenceValue >= 50 ? 'warn' : 'danger'}`;
+        document.getElementById('strength').textContent = alert.strength ?? '--';
+        document.getElementById('riskReward').textContent = alert.riskReward ?? '--';
+        document.getElementById('entry').textContent = formatPrice(alert.entry);
+        document.getElementById('stopLoss').textContent = formatPrice(alert.stopLoss);
+        document.getElementById('takeProfit').textContent = formatPrice(alert.takeProfit);
+        document.getElementById('lastUpdate').textContent = new Date().toLocaleString('pt-BR');
 
-        document.getElementById('alertJson').textContent =
-          JSON.stringify(alert, null, 2);
+        const trend4hEl = document.getElementById('trend4h');
+        trend4hEl.textContent = tf4h.trend ?? '--';
+        trend4hEl.className = `value ${trendClass(tf4h.trend)}`;
+        document.getElementById('trend4hDetails').textContent =
+          `RSI ${tf4h.rsi14 ?? '--'} | MACD ${tf4h.macdState ?? '--'} | Volume ${tf4h.volumeState ?? '--'}`;
+
+        const trend1hEl = document.getElementById('trend1h');
+        trend1hEl.textContent = tf1h.trend ?? '--';
+        trend1hEl.className = `value ${trendClass(tf1h.trend)}`;
+        document.getElementById('trend1hDetails').textContent =
+          `RSI ${tf1h.rsi14 ?? '--'} | MACD ${tf1h.macdState ?? '--'} | Volume ${tf1h.volumeState ?? '--'}`;
+
+        document.getElementById('noteText').textContent = alert.note ?? 'Sem observações.';
+        document.getElementById('statusLine').textContent =
+          `Contexto: ${(alert.timeframeContext || []).join(' / ') || '--'}`;
+
+        document.getElementById('alertJson').textContent = JSON.stringify(alert, null, 2);
       } catch (error) {
         document.getElementById('backendStatus').textContent = 'Erro ❌';
         document.getElementById('backendStatus').className = 'value danger';
-        document.getElementById('alertJson').textContent = error.message;
+        document.getElementById('backendText').textContent = 'Falha ao carregar /health';
+        document.getElementById('noteText').textContent = 'Erro ao carregar dados do painel.';
+        document.getElementById('statusLine').textContent = error.message;
+        document.getElementById('alertJson').textContent = error.stack || error.message;
       }
     }
 
