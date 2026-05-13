@@ -96,10 +96,21 @@
       margin-top: 8px;
     }
 
-    .ok { color: #22c55e; }
-    .warn { color: #facc15; }
-    .danger { color: #ef4444; }
-    .neutral { color: #38bdf8; }
+    .ok {
+      color: #22c55e;
+    }
+
+    .warn {
+      color: #facc15;
+    }
+
+    .danger {
+      color: #ef4444;
+    }
+
+    .neutral {
+      color: #38bdf8;
+    }
 
     .wide {
       margin-top: 16px;
@@ -334,7 +345,7 @@
 
         document.getElementById('noteText').textContent = alert.note ?? 'Sem observações.';
         document.getElementById('statusLine').textContent =
-          `Contexto: ${(alert.timeframeContext || []).join(' / ') || '--'}`;
+          `Atualização automática ligada · Contexto: ${(alert.timeframeContext || []).join(' / ') || '--'}`;
 
         document.getElementById('alertJson').textContent = JSON.stringify(alert, null, 2);
       } catch (error) {
@@ -348,6 +359,7 @@
     }
 
     loadDashboard();
+    setInterval(loadDashboard, 15000);
   </script>
 </body>
 </html>
