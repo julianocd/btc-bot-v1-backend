@@ -9,13 +9,13 @@ import tradeRoutes from './routes/trade.routes.js';
 import { requireAuth } from './middleware/require-auth.js';
 
 const app = express();
+
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: env.appOrigin, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.static('public'));
 
-app.get('/', (_req, res) => res.json({ ok: true, service: 'btc-bot-v1-backend' }));
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 app.use('/auth', authRoutes);

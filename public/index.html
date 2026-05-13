@@ -4,22 +4,178 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BTC Bot Dashboard</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #94a3b8;
+      margin-bottom: 24px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    }
+
+    .label {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 8px;
+    }
+
+    .value {
+      font-size: 22px;
+      font-weight: bold;
+    }
+
+    .ok {
+      color: #22c55e;
+    }
+
+    .warn {
+      color: #facc15;
+    }
+
+    .danger {
+      color: #ef4444;
+    }
+
+    button {
+      background: #2563eb;
+      color: white;
+      border: 0;
+      padding: 12px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 24px;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #0b1220;
+      padding: 16px;
+      border-radius: 12px;
+      overflow-x: auto;
+    }
+  </style>
 </head>
 <body>
-  <h1>BTC Bot Dashboard</h1>
-  <p>Seu site está no ar.</p>
-  <p id="status">Carregando status...</p>
+  <div class="container">
+    <h1>BTC Bot Dashboard</h1>
+    <p class="subtitle">Painel inicial dos alertas do bot</p>
+
+    <button onclick="loadDashboard()">Atualizar painel</button>
+
+    <div class="grid">
+      <div class="card">
+        <div class="label">Status backend</div>
+        <div class="value" id="backendStatus">Carregando...</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Símbolo</div>
+        <div class="value" id="symbol">--</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Bias</div>
+        <div class="value" id="bias">--</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Confiança</div>
+        <div class="value" id="confidence">--</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Força</div>
+        <div class="value" id="strength">--</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Último alerta</div>
+        <div class="value" id="lastUpdate">--</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">JSON do último alerta</div>
+      <pre id="alertJson">Carregando...</pre>
+    </div>
+  </div>
 
   <script>
-    fetch('/health')
-      .then(res => res.json())
-      .then(data => {
-        document.getElementById('status').textContent =
-          data.ok ? 'Backend online ✅' : 'Backend offline ❌';
-      })
-      .catch(() => {
-        document.getElementById('status').textContent = 'Erro ao consultar backend ❌';
-      });
+    async function loadDashboard() {
+      try {
+        const healthRes = await fetch('/health');
+        const health = await healthRes.json();
+
+        document.getElementById('backendStatus').textContent =
+          health.ok ? 'Online ✅' : 'Offline ❌';
+        document.getElementById('backendStatus').className =
+          `value ${health.ok ? 'ok' : 'danger'}`;
+
+        const alertRes = await fetch('/market/alerts');
+        const alertData = await alertRes.json();
+
+        if (!alertData.ok || !alertData.alert) {
+          document.getElementById('alertJson').textContent =
+            JSON.stringify(alertData, null, 2);
+          return;
+        }
+
+        const alert = alertData.alert;
+
+        document.getElementById('symbol').textContent = alert.symbol ?? '--';
+        document.getElementById('bias').textContent = alert.bias ?? '--';
+        document.getElementById('confidence').textContent =
+          alert.confidence != null ? `${alert.confidence}%` : '--';
+        document.getElementById('strength').textContent = alert.strength ?? '--';
+        document.getElementById('lastUpdate').textContent =
+          new Date().toLocaleString('pt-BR');
+
+        const confidenceEl = document.getElementById('confidence');
+        const confidenceValue = Number(alert.confidence ?? 0);
+
+        confidenceEl.className =
+          `value ${confidenceValue >= 70 ? 'ok' : confidenceValue >= 50 ? 'warn' : 'danger'}`;
+
+        document.getElementById('alertJson').textContent =
+          JSON.stringify(alert, null, 2);
+      } catch (error) {
+        document.getElementById('backendStatus').textContent = 'Erro ❌';
+        document.getElementById('backendStatus').className = 'value danger';
+        document.getElementById('alertJson').textContent = error.message;
+      }
+    }
+
+    loadDashboard();
   </script>
 </body>
 </html>

@@ -4,8 +4,13 @@ import { binanceRest } from '../services/binance-rest.service.js';
 import { buildPlaceholderSignal } from '../services/signal-engine.service.js';
 import { sendTelegramMessage } from '../services/telegram.service.js';
 import { readFile, writeFile } from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const router = Router();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 router.get('/snapshot', async (_req, res) => {
   try {
@@ -18,6 +23,25 @@ router.get('/snapshot', async (_req, res) => {
     res.json({ serverTime, ticker, signal });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/alerts', async (_req, res) => {
+  try {
+    const filePath = path.resolve(__dirname, '../../alert-state.json');
+    const content = await readFile(filePath, 'utf8');
+    const data = JSON.parse(content);
+
+    res.json({
+      ok: true,
+      alert: data
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      message: 'Erro ao carregar alerta',
+      error: error.message
+    });
   }
 });
 
@@ -59,9 +83,8 @@ router.post('/alert-signal', async (_req, res) => {
       });
     }
 
-    // ANTI-DUPLICATAS DIRETO NA ROTA
     const ALERT_STATE_FILE = './alert-state.json';
-    
+
     try {
       const data = await readFile(ALERT_STATE_FILE, 'utf8');
       const lastState = JSON.parse(data);
@@ -93,7 +116,6 @@ router.post('/alert-signal', async (_req, res) => {
       }
     }
 
-    // LÓGICA DE AÇÃO
     const rsi1h = signal.indicators?.['1h']?.rsi14 ?? 50;
     const trend4h = signal.indicators?.['4h']?.trend ?? 'NEUTRAL';
     const trend1h = signal.indicators?.['1h']?.trend ?? 'NEUTRAL';
