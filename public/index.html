@@ -61,6 +61,51 @@
       background: #1d4ed8;
     }
 
+    .hero-signal {
+      border-radius: 18px;
+      padding: 22px;
+      margin-bottom: 20px;
+      border: 1px solid #334155;
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+    }
+
+    .hero-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #94a3b8;
+      margin-bottom: 10px;
+    }
+
+    .hero-value {
+      font-size: 34px;
+      font-weight: bold;
+      line-height: 1.1;
+      margin-bottom: 10px;
+    }
+
+    .hero-meta {
+      color: #cbd5e1;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .hero-buy {
+      border-color: rgba(34, 197, 94, 0.4);
+      background: linear-gradient(135deg, rgba(34,197,94,0.18), rgba(15,23,42,1));
+    }
+
+    .hero-sell {
+      border-color: rgba(239, 68, 68, 0.4);
+      background: linear-gradient(135deg, rgba(239,68,68,0.18), rgba(15,23,42,1));
+    }
+
+    .hero-wait {
+      border-color: rgba(250, 204, 21, 0.4);
+      background: linear-gradient(135deg, rgba(250,204,21,0.18), rgba(15,23,42,1));
+    }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -155,6 +200,10 @@
       .value {
         font-size: 20px;
       }
+
+      .hero-value {
+        font-size: 28px;
+      }
     }
   </style>
 </head>
@@ -168,6 +217,14 @@
 
       <div class="actions">
         <button onclick="loadDashboard()">Atualizar painel</button>
+      </div>
+    </div>
+
+    <div class="hero-signal hero-wait" id="heroSignal">
+      <div class="hero-label">Recomendação principal</div>
+      <div class="hero-value warn" id="heroRecommendation">Espere confirmação</div>
+      <div class="hero-meta" id="heroMeta">
+        Lendo dados do backend...
       </div>
     </div>
 
@@ -229,7 +286,7 @@
       <div class="card">
         <div class="label">Atualizado em</div>
         <div class="value" id="lastUpdate">--</div>
-        <div class="small">Horário local do painel</div>
+        <div class="small">Horário da última leitura</div>
       </div>
     </div>
 
@@ -259,110 +316,194 @@
     </div>
   </div>
 
- <script>
-  function formatPrice(value) {
-    if (value == null) return '--';
-    return Number(value).toLocaleString('pt-BR', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2
-    });
-  }
+  <script>
+    function formatPrice(value) {
+      if (value == null || value === '') return '--';
+      const n = Number(value);
+      if (Number.isNaN(n)) return value;
+      return n.toLocaleString('pt-BR', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+      });
+    }
 
-  function confidenceClass(value) {
-    const n = Number(value || 0);
-    if (n >= 70) return 'ok';
-    if (n >= 50) return 'warn';
-    return 'danger';
-  }
+    function confidenceClass(value) {
+      const n = Number(value || 0);
+      if (n >= 70) return 'ok';
+      if (n >= 50) return 'warn';
+      return 'danger';
+    }
 
-  function trendClass(value) {
-    if (value === 'BULLISH') return 'ok';
-    if (value === 'BEARISH') return 'danger';
-    return 'neutral';
-  }
+    function trendClass(value) {
+      if (value === 'BULLISH') return 'ok';
+      if (value === 'BEARISH') return 'danger';
+      return 'neutral';
+    }
 
-  function biasClass(value) {
-    if (value && value.includes('BUY')) return 'ok';
-    if (value && value.includes('SELL')) return 'danger';
-    if (value === 'BULLISH') return 'ok';
-    if (value === 'BEARISH') return 'danger';
-    return 'warn';
-  }
+    function biasClass(value) {
+      if (!value) return 'warn';
+      if (value.includes('BUY')) return 'ok';
+      if (value.includes('SELL')) return 'danger';
+      if (value === 'BULLISH') return 'ok';
+      if (value === 'BEARISH') return 'danger';
+      return 'warn';
+    }
 
-  async function loadDashboard() {
-    try {
-      const now = new Date();
+    function getRecommendation(bias) {
+      const normalized = String(bias || '').toUpperCase();
 
-      const healthRes = await fetch('/health?_ts=' + now.getTime());
-      const health = await healthRes.json();
-
-      const backendStatus = document.getElementById('backendStatus');
-      backendStatus.textContent = health.ok ? 'Online ✅' : 'Offline ❌';
-      backendStatus.className = `value ${health.ok ? 'ok' : 'danger'}`;
-      document.getElementById('backendText').textContent =
-        `API respondendo normalmente · ${now.toLocaleTimeString('pt-BR')}`;
-
-      const alertRes = await fetch('/market/alerts?_ts=' + now.getTime());
-      const alertData = await alertRes.json();
-
-      if (!alertData.ok || !alertData.alert) {
-        document.getElementById('noteText').textContent = 'Nenhum alerta encontrado.';
-        document.getElementById('statusLine').textContent =
-          `Sem alerta válido · Última leitura: ${now.toLocaleTimeString('pt-BR')}`;
-        document.getElementById('alertJson').textContent = JSON.stringify(alertData, null, 2);
-        return;
+      if (
+        normalized.includes('STRONG_BUY') ||
+        normalized === 'BUY' ||
+        normalized.includes('WATCHLIST_BUY') ||
+        normalized.includes('BUY')
+      ) {
+        return {
+          text: 'Comprar agora',
+          heroClass: 'hero-signal hero-buy',
+          textClass: 'hero-value ok'
+        };
       }
 
-      const alert = alertData.alert;
-      const tf4h = alert.indicators && alert.indicators['4h'] ? alert.indicators['4h'] : {};
-      const tf1h = alert.indicators && alert.indicators['1h'] ? alert.indicators['1h'] : {};
+      if (
+        normalized.includes('STRONG_SELL') ||
+        normalized === 'SELL' ||
+        normalized.includes('WATCHLIST_SELL') ||
+        normalized.includes('SELL')
+      ) {
+        return {
+          text: 'Vender agora',
+          heroClass: 'hero-signal hero-sell',
+          textClass: 'hero-value danger'
+        };
+      }
 
-      document.getElementById('symbol').textContent = alert.symbol ?? '--';
-
-      const biasEl = document.getElementById('bias');
-      biasEl.textContent = alert.bias ?? '--';
-      biasEl.className = `value ${biasClass(alert.bias)}`;
-
-      const confidenceEl = document.getElementById('confidence');
-      confidenceEl.textContent = alert.confidence != null ? `${alert.confidence}%` : '--';
-      confidenceEl.className = `value ${confidenceClass(alert.confidence)}`;
-
-      document.getElementById('strength').textContent = alert.strength ?? '--';
-      document.getElementById('riskReward').textContent = alert.riskReward ?? '--';
-      document.getElementById('entry').textContent = formatPrice(alert.entry);
-      document.getElementById('stopLoss').textContent = formatPrice(alert.stopLoss);
-      document.getElementById('takeProfit').textContent = formatPrice(alert.takeProfit);
-      document.getElementById('lastUpdate').textContent = now.toLocaleString('pt-BR');
-
-      const trend4hEl = document.getElementById('trend4h');
-      trend4hEl.textContent = tf4h.trend ?? '--';
-      trend4hEl.className = `value ${trendClass(tf4h.trend)}`;
-      document.getElementById('trend4hDetails').textContent =
-        `RSI ${tf4h.rsi14 ?? '--'} | MACD ${tf4h.macdState ?? '--'} | Volume ${tf4h.volumeState ?? '--'}`;
-
-      const trend1hEl = document.getElementById('trend1h');
-      trend1hEl.textContent = tf1h.trend ?? '--';
-      trend1hEl.className = `value ${trendClass(tf1h.trend)}`;
-      document.getElementById('trend1hDetails').textContent =
-        `RSI ${tf1h.rsi14 ?? '--'} | MACD ${tf1h.macdState ?? '--'} | Volume ${tf1h.volumeState ?? '--'}`;
-
-      document.getElementById('noteText').textContent = alert.note ?? 'Sem observações.';
-      document.getElementById('statusLine').textContent =
-        `Atualização automática ligada · Última leitura: ${now.toLocaleTimeString('pt-BR')} · Contexto: ${(alert.timeframeContext || []).join(' / ') || '--'}`;
-
-      document.getElementById('alertJson').textContent = JSON.stringify(alert, null, 2);
-    } catch (error) {
-      document.getElementById('backendStatus').textContent = 'Erro ❌';
-      document.getElementById('backendStatus').className = 'value danger';
-      document.getElementById('backendText').textContent = 'Falha ao carregar /health';
-      document.getElementById('noteText').textContent = 'Erro ao carregar dados do painel.';
-      document.getElementById('statusLine').textContent = error.message;
-      document.getElementById('alertJson').textContent = error.stack || error.message;
+      return {
+        text: 'Espere confirmação',
+        heroClass: 'hero-signal hero-wait',
+        textClass: 'hero-value warn'
+      };
     }
-  }
 
-  loadDashboard();
-  setInterval(loadDashboard, 15000);
-</script>
+    async function loadDashboard() {
+      const now = new Date();
+      const ts = now.getTime();
+
+      try {
+        const healthRes = await fetch(`/health?_ts=${ts}`, { cache: 'no-store' });
+        const health = await healthRes.json();
+
+        const backendStatus = document.getElementById('backendStatus');
+        backendStatus.textContent = health.ok ? 'Online ✅' : 'Offline ❌';
+        backendStatus.className = `value ${health.ok ? 'ok' : 'danger'}`;
+        document.getElementById('backendText').textContent =
+          `API respondendo normalmente · ${now.toLocaleTimeString('pt-BR')}`;
+
+        const alertRes = await fetch(`/market/alerts?_ts=${ts}`, { cache: 'no-store' });
+        const alertData = await alertRes.json();
+
+        if (!alertData.ok || !alertData.alert) {
+          document.getElementById('symbol').textContent = '--';
+          document.getElementById('bias').textContent = '--';
+          document.getElementById('confidence').textContent = '--';
+          document.getElementById('strength').textContent = '--';
+          document.getElementById('riskReward').textContent = '--';
+          document.getElementById('entry').textContent = '--';
+          document.getElementById('stopLoss').textContent = '--';
+          document.getElementById('takeProfit').textContent = '--';
+          document.getElementById('trend4h').textContent = '--';
+          document.getElementById('trend1h').textContent = '--';
+          document.getElementById('trend4hDetails').textContent = '--';
+          document.getElementById('trend1hDetails').textContent = '--';
+          document.getElementById('lastUpdate').textContent = now.toLocaleTimeString('pt-BR');
+          document.getElementById('noteText').textContent = 'Nenhum alerta encontrado.';
+          document.getElementById('statusLine').textContent =
+            `Sem alerta válido · Última leitura: ${now.toLocaleTimeString('pt-BR')}`;
+          document.getElementById('alertJson').textContent = JSON.stringify(alertData, null, 2);
+
+          const hero = document.getElementById('heroSignal');
+          const heroRecommendation = document.getElementById('heroRecommendation');
+          const heroMeta = document.getElementById('heroMeta');
+
+          hero.className = 'hero-signal hero-wait';
+          heroRecommendation.className = 'hero-value warn';
+          heroRecommendation.textContent = 'Espere confirmação';
+          heroMeta.textContent = 'Nenhum alerta válido retornado pelo backend.';
+          return;
+        }
+
+        const alert = alertData.alert;
+        const tf4h = alert.indicators && alert.indicators['4h'] ? alert.indicators['4h'] : {};
+        const tf1h = alert.indicators && alert.indicators['1h'] ? alert.indicators['1h'] : {};
+
+        document.getElementById('symbol').textContent = alert.symbol ?? '--';
+
+        const biasEl = document.getElementById('bias');
+        biasEl.textContent = alert.bias ?? '--';
+        biasEl.className = `value ${biasClass(alert.bias)}`;
+
+        const confidenceEl = document.getElementById('confidence');
+        confidenceEl.textContent = alert.confidence != null ? `${alert.confidence}%` : '--';
+        confidenceEl.className = `value ${confidenceClass(alert.confidence)}`;
+
+        document.getElementById('strength').textContent = alert.strength ?? '--';
+        document.getElementById('riskReward').textContent = alert.riskReward ?? '--';
+        document.getElementById('entry').textContent = formatPrice(alert.entry);
+        document.getElementById('stopLoss').textContent = formatPrice(alert.stopLoss);
+        document.getElementById('takeProfit').textContent = formatPrice(alert.takeProfit);
+        document.getElementById('lastUpdate').textContent = now.toLocaleString('pt-BR');
+
+        const trend4hEl = document.getElementById('trend4h');
+        trend4hEl.textContent = tf4h.trend ?? '--';
+        trend4hEl.className = `value ${trendClass(tf4h.trend)}`;
+        document.getElementById('trend4hDetails').textContent =
+          `RSI ${tf4h.rsi14 ?? '--'} | MACD ${tf4h.macdState ?? '--'} | Volume ${tf4h.volumeState ?? '--'}`;
+
+        const trend1hEl = document.getElementById('trend1h');
+        trend1hEl.textContent = tf1h.trend ?? '--';
+        trend1hEl.className = `value ${trendClass(tf1h.trend)}`;
+        document.getElementById('trend1hDetails').textContent =
+          `RSI ${tf1h.rsi14 ?? '--'} | MACD ${tf1h.macdState ?? '--'} | Volume ${tf1h.volumeState ?? '--'}`;
+
+        document.getElementById('noteText').textContent = alert.note ?? 'Sem observações.';
+        document.getElementById('statusLine').textContent =
+          `Atualização automática ligada · Última leitura: ${now.toLocaleTimeString('pt-BR')} · Contexto: ${(alert.timeframeContext || []).join(' / ') || '--'}`;
+
+        document.getElementById('alertJson').textContent = JSON.stringify(alert, null, 2);
+
+        const recommendation = getRecommendation(alert.bias);
+        const hero = document.getElementById('heroSignal');
+        const heroRecommendation = document.getElementById('heroRecommendation');
+        const heroMeta = document.getElementById('heroMeta');
+
+        hero.className = recommendation.heroClass;
+        heroRecommendation.className = recommendation.textClass;
+        heroRecommendation.textContent = recommendation.text;
+        heroMeta.textContent =
+          `Bias do bot: ${alert.bias ?? '--'} · Confiança: ${alert.confidence ?? '--'}% · Força: ${alert.strength ?? '--'} · Última leitura: ${now.toLocaleTimeString('pt-BR')}`;
+      } catch (error) {
+        document.getElementById('backendStatus').textContent = 'Erro ❌';
+        document.getElementById('backendStatus').className = 'value danger';
+        document.getElementById('backendText').textContent = `Falha ao carregar /health · ${now.toLocaleTimeString('pt-BR')}`;
+        document.getElementById('lastUpdate').textContent = now.toLocaleTimeString('pt-BR');
+        document.getElementById('noteText').textContent = 'Erro ao carregar dados do painel.';
+        document.getElementById('statusLine').textContent =
+          `Falha na atualização automática · Última tentativa: ${now.toLocaleTimeString('pt-BR')}`;
+        document.getElementById('alertJson').textContent = error.stack || error.message;
+
+        const hero = document.getElementById('heroSignal');
+        const heroRecommendation = document.getElementById('heroRecommendation');
+        const heroMeta = document.getElementById('heroMeta');
+
+        hero.className = 'hero-signal hero-wait';
+        heroRecommendation.className = 'hero-value warn';
+        heroRecommendation.textContent = 'Espere confirmação';
+        heroMeta.textContent = `Erro ao ler backend · ${now.toLocaleTimeString('pt-BR')}`;
+      }
+    }
+
+    loadDashboard();
+    setInterval(loadDashboard, 15000);
+  </script>
 </body>
 </html>
