@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BTC Bot Dashboard</title>
+</head>
+<body>
+  <h1>BTC Bot Dashboard</h1>
+  <p>Seu site está no ar.</p>
+  <p id="status">Carregando status...</p>
+
+  <script>
+    fetch('/health')
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById('status').textContent =
+          data.ok ? 'Backend online ✅' : 'Backend offline ❌';
+      })
+      .catch(() => {
+        document.getElementById('status').textContent = 'Erro ao consultar backend ❌';
+      });
+  </script>
+</body>
+</html>
