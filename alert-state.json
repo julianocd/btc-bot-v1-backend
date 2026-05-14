@@ -1,41 +1,41 @@
 {
   "symbol": "BTCUSDT",
-  "bias": "WATCHLIST_BUY",
+  "bias": "NEUTRAL",
   "timeframeContext": [
     "4h",
     "1h"
   ],
-  "entry": 81560,
-  "stopLoss": 80336.6,
-  "takeProfit": 84006.8,
+  "entry": 79491.23,
+  "stopLoss": 78855.3,
+  "takeProfit": 80763.09,
   "riskReward": 2,
-  "confidence": 70,
-  "strength": "MEDIUM",
+  "confidence": 50,
+  "strength": "LOW",
   "indicators": {
     "4h": {
-      "candles": 27,
+      "candles": 45,
       "trend": "NEUTRAL",
-      "rsi14": 54,
-      "macdState": "BULLISH",
-      "macdLine": 425.4697,
-      "signalLine": 420.9109,
-      "histogram": 4.5588,
-      "volumeState": "WEAK",
+      "rsi14": 40.93,
+      "macdState": "BEARISH",
+      "macdLine": -302.9033,
+      "signalLine": -77.4618,
+      "histogram": -225.4415,
+      "volumeState": "NEUTRAL",
       "confidence": 40,
       "strength": "LOW"
     },
     "1h": {
-      "candles": 106,
-      "trend": "BULLISH",
-      "rsi14": 56.95,
+      "candles": 178,
+      "trend": "NEUTRAL",
+      "rsi14": 42.06,
       "macdState": "BULLISH",
-      "macdLine": 248.6981,
-      "signalLine": 207.7022,
-      "histogram": 40.9959,
-      "volumeState": "STRONG",
-      "confidence": 100,
-      "strength": "HIGH"
+      "macdLine": -349.635,
+      "signalLine": -351.6288,
+      "histogram": 1.9939,
+      "volumeState": "WEAK",
+      "confidence": 60,
+      "strength": "MEDIUM"
     }
   },
-  "note": "4h=NEUTRAL | 1h=BULLISH | MACD 4h=BULLISH | MACD 1h=BULLISH | VOL 4h=WEAK | VOL 1h=STRONG | RSI 4h=54.0 | RSI 1h=57.0 | CONF=70"
+  "note": "4h=NEUTRAL | 1h=NEUTRAL | MACD 4h=BEARISH | MACD 1h=BULLISH | VOL 4h=NEUTRAL | VOL 1h=WEAK | RSI 4h=40.9 | RSI 1h=42.1 | CONF=50"
 }
