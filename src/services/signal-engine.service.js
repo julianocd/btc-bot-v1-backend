@@ -1,20 +1,33 @@
 import { env } from '../config/env.js';
 import { binanceRest } from './binance-rest.service.js';
 
+function normalizeNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function toCloses(klines) {
-  return klines.map((k) => Number(k[4]));
+  return (klines || [])
+    .map((k) => normalizeNumber(k?.[4], NaN))
+    .filter(Number.isFinite);
 }
 
 function toVolumes(klines) {
-  return klines.map((k) => Number(k[5]));
+  return (klines || [])
+    .map((k) => normalizeNumber(k?.[5], 0))
+    .filter((n) => Number.isFinite(n));
 }
 
 function toHighs(klines) {
-  return klines.map((k) => Number(k[2]));
+  return (klines || [])
+    .map((k) => normalizeNumber(k?.[2], NaN))
+    .filter(Number.isFinite);
 }
 
 function toLows(klines) {
-  return klines.map((k) => Number(k[3]));
+  return (klines || [])
+    .map((k) => normalizeNumber(k?.[3], NaN))
+    .filter(Number.isFinite);
 }
 
 function average(values) {
@@ -76,7 +89,9 @@ function macd(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
 
   const offset = slowPeriod - fastPeriod;
   const alignedFast = fast.slice(offset);
-  const macdSeries = slow.map((slowValue, index) => alignedFast[index] - slowValue);
+  const macdSeries = slow
+    .map((slowValue, index) => alignedFast[index] - slowValue)
+    .filter(Number.isFinite);
 
   if (!macdSeries.length) {
     return {
@@ -155,7 +170,9 @@ function rsi(values, period = 14) {
 }
 
 function volumeAnalysis(volumes) {
-  if (!volumes || volumes.length < 20) {
+  const cleanVolumes = (volumes || []).filter((v) => Number.isFinite(v));
+
+  if (!cleanVolumes.length) {
     return {
       lastVolume: null,
       avg5: null,
@@ -164,9 +181,18 @@ function volumeAnalysis(volumes) {
     };
   }
 
-  const lastVolume = volumes.at(-1);
-  const avg5 = average(volumes.slice(-5));
-  const avg20 = average(volumes.slice(-20));
+  if (cleanVolumes.length < 20) {
+    return {
+      lastVolume: cleanVolumes.at(-1) ?? null,
+      avg5: average(cleanVolumes.slice(-5)),
+      avg20: average(cleanVolumes),
+      state: 'NEUTRAL'
+    };
+  }
+
+  const lastVolume = cleanVolumes.at(-1);
+  const avg5 = average(cleanVolumes.slice(-5));
+  const avg20 = average(cleanVolumes.slice(-20));
 
   let state = 'NEUTRAL';
   if (avg5 != null && avg20 != null) {
@@ -332,6 +358,7 @@ function levels(price, bias, highs = [], lows = [], closes = []) {
     riskReward
   };
 }
+
 export async function buildPlaceholderSignal(lastPrice) {
   const [klines4h, klines1h] = await Promise.all([
     binanceRest.klines(env.binanceSymbol, '4h', 200),
