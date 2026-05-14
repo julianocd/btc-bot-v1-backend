@@ -7,7 +7,7 @@ import { buildPlaceholderSignal } from './services/signal-engine.service.js';
 import { sendTelegramMessage } from './services/telegram.service.js';
 
 const ALERT_STATE_FILE = './alert-state.json';
-const INTERVAL_MS = 5 * 60 * 1000;
+const INTERVAL_MS = 15 * 60 * 1000;
 
 async function runSignalJob() {
   try {
@@ -17,30 +17,32 @@ async function runSignalJob() {
     const signal = await buildPlaceholderSignal(ticker.lastPrice);
     const minConfidence = Number(env.alertMinConfidence ?? 60);
 
+    let lastState = null;
+
     try {
       const lastContent = await readFile(ALERT_STATE_FILE, 'utf8');
-      const lastState = JSON.parse(lastContent);
-
-      const changed =
-        lastState.bias !== signal.bias ||
-        Math.abs((lastState.confidence ?? 0) - (signal.confidence ?? 0)) >= 5 ||
-        Number(lastState.entry ?? 0) !== Number(signal.entry ?? 0) ||
-        Number(lastState.stopLoss ?? 0) !== Number(signal.stopLoss ?? 0) ||
-        Number(lastState.takeProfit ?? 0) !== Number(signal.takeProfit ?? 0);
-
-      if (!changed) {
-        logger.info('[CRON] Sinal igual ao anterior, mantendo estado atualizado sem Telegram');
-        await writeFile(ALERT_STATE_FILE, JSON.stringify(signal, null, 2));
-        return;
-      }
+      lastState = JSON.parse(lastContent);
     } catch (error) {
       if (error.code !== 'ENOENT') {
         logger.error({ error: error.message }, '[CRON] Erro ao ler estado anterior');
       }
     }
 
+    const changed =
+      !lastState ||
+      lastState.bias !== signal.bias ||
+      Math.abs((lastState.confidence ?? 0) - (signal.confidence ?? 0)) >= 5 ||
+      Number(lastState.entry ?? 0) !== Number(signal.entry ?? 0) ||
+      Number(lastState.stopLoss ?? 0) !== Number(signal.stopLoss ?? 0) ||
+      Number(lastState.takeProfit ?? 0) !== Number(signal.takeProfit ?? 0);
+
     await writeFile(ALERT_STATE_FILE, JSON.stringify(signal, null, 2));
     logger.info(`[CRON] Estado atualizado: ${signal.bias} | conf: ${signal.confidence}`);
+
+    if (!changed) {
+      logger.info('[CRON] Sinal igual ao anterior, arquivo atualizado sem Telegram');
+      return;
+    }
 
     if (signal.confidence < minConfidence) {
       logger.info(`[CRON] Confiança baixa (${signal.confidence}), arquivo atualizado sem enviar Telegram`);
