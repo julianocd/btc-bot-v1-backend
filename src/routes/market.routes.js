@@ -12,6 +12,118 @@ const router = Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function getRecommendationFromBias(bias) {
+  const normalized = String(bias || '').toUpperCase();
+
+  if (
+    normalized.includes('STRONG_BUY') ||
+    normalized === 'BUY' ||
+    normalized.includes('WATCHLIST_BUY')
+  ) {
+    return {
+      recommendationType: 'BUY_NOW',
+      recommendationLabel: 'Comprar agora'
+    };
+  }
+
+  if (
+    normalized.includes('STRONG_SELL') ||
+    normalized === 'SELL' ||
+    normalized.includes('WATCHLIST_SELL')
+  ) {
+    return {
+      recommendationType: 'SELL_NOW',
+      recommendationLabel: 'Vender agora'
+    };
+  }
+
+  return {
+    recommendationType: 'WAIT_CONFIRMATION',
+    recommendationLabel: 'Espere confirmação'
+  };
+}
+
+function getTradeAction(signal) {
+  const rsi1h = signal.indicators?.['1h']?.rsi14 ?? 50;
+  const trend4h = signal.indicators?.['4h']?.trend ?? 'NEUTRAL';
+  const trend1h = signal.indicators?.['1h']?.trend ?? 'NEUTRAL';
+  const macd1h = signal.indicators?.['1h']?.macdState ?? 'NEUTRAL';
+  const volume1h = signal.indicators?.['1h']?.volumeState ?? 'WEAK';
+
+  const alignedBullish = trend4h === 'BULLISH' && trend1h === 'BULLISH';
+  const alignedBearish = trend4h === 'BEARISH' && trend1h === 'BEARISH';
+
+  if (signal.confidence < 70) {
+    return {
+      tradeAction: 'NÃO OPERE',
+      recommendationType: 'WAIT_CONFIRMATION',
+      recommendationLabel: 'Espere confirmação'
+    };
+  }
+
+  if (
+    signal.bias === 'BULLISH' &&
+    signal.strength === 'HIGH' &&
+    alignedBullish &&
+    macd1h === 'BULLISH' &&
+    volume1h === 'STRONG' &&
+    rsi1h <= 70
+  ) {
+    return {
+      tradeAction: '🟢 COMPRE AGORA',
+      recommendationType: 'BUY_NOW',
+      recommendationLabel: 'Comprar agora'
+    };
+  }
+
+  if (
+    signal.bias === 'BULLISH' &&
+    signal.confidence >= 70 &&
+    macd1h === 'BULLISH' &&
+    volume1h === 'STRONG' &&
+    rsi1h > 70
+  ) {
+    return {
+      tradeAction: '🟡 ESPERE PULLBACK',
+      recommendationType: 'WAIT_CONFIRMATION',
+      recommendationLabel: 'Espere confirmação'
+    };
+  }
+
+  if (
+    signal.bias === 'BEARISH' &&
+    signal.strength === 'HIGH' &&
+    alignedBearish &&
+    macd1h === 'BEARISH' &&
+    volume1h === 'STRONG' &&
+    rsi1h >= 30
+  ) {
+    return {
+      tradeAction: '🔴 VENDA AGORA',
+      recommendationType: 'SELL_NOW',
+      recommendationLabel: 'Vender agora'
+    };
+  }
+
+  if (
+    trend4h !== trend1h ||
+    signal.bias === 'WATCHLIST_BUY' ||
+    signal.bias === 'WATCHLIST_SELL'
+  ) {
+    return {
+      tradeAction: '⏳ ESPERE CONFIRMAÇÃO',
+      recommendationType: 'WAIT_CONFIRMATION',
+      recommendationLabel: 'Espere confirmação'
+    };
+  }
+
+  return {
+    tradeAction: '⚠️ ESPERE TENDÊNCIA',
+    recommendationType: 'WAIT_CONFIRMATION',
+    recommendationLabel: 'Espere confirmação'
+  };
+}
+
 router.get('/snapshot', async (_req, res) => {
   try {
     const [serverTime, ticker] = await Promise.all([
@@ -31,10 +143,16 @@ router.get('/alerts', async (_req, res) => {
     const filePath = path.resolve(__dirname, '../../alert-state.json');
     const content = await readFile(filePath, 'utf8');
     const data = JSON.parse(content);
+    const recommendation = getTradeAction(data);
 
     res.json({
       ok: true,
-      alert: data
+      alert: {
+        ...data,
+        recommendationType: recommendation.recommendationType,
+        recommendationLabel: recommendation.recommendationLabel,
+        tradeAction: recommendation.tradeAction
+      }
     });
   } catch (error) {
     res.status(500).json({
@@ -112,57 +230,12 @@ router.post('/alert-signal', async (_req, res) => {
         console.log('📝 Primeira execução, criando estado');
         await writeFile(ALERT_STATE_FILE, JSON.stringify(signal, null, 2));
       } else {
-        console.error('❌ Erro estado:', error.message);
+        console.error('⌛ Erro estado:', error.message);
       }
     }
 
-    const rsi1h = signal.indicators?.['1h']?.rsi14 ?? 50;
-    const trend4h = signal.indicators?.['4h']?.trend ?? 'NEUTRAL';
-    const trend1h = signal.indicators?.['1h']?.trend ?? 'NEUTRAL';
-    const macd1h = signal.indicators?.['1h']?.macdState ?? 'NEUTRAL';
-    const volume1h = signal.indicators?.['1h']?.volumeState ?? 'WEAK';
-
-    const alignedBullish = trend4h === 'BULLISH' && trend1h === 'BULLISH';
-    const alignedBearish = trend4h === 'BEARISH' && trend1h === 'BEARISH';
-
-    let tradeAction;
-    if (signal.confidence < 70) {
-      tradeAction = 'NÃO OPERE';
-    } else if (
-      signal.bias === 'BULLISH' &&
-      signal.strength === 'HIGH' &&
-      alignedBullish &&
-      macd1h === 'BULLISH' &&
-      volume1h === 'STRONG' &&
-      rsi1h <= 70
-    ) {
-      tradeAction = '🟢 COMPRE AGORA';
-    } else if (
-      signal.bias === 'BULLISH' &&
-      signal.confidence >= 70 &&
-      macd1h === 'BULLISH' &&
-      volume1h === 'STRONG' &&
-      rsi1h > 70
-    ) {
-      tradeAction = '🟡 ESPERE PULLBACK';
-    } else if (
-      signal.bias === 'BEARISH' &&
-      signal.strength === 'HIGH' &&
-      alignedBearish &&
-      macd1h === 'BEARISH' &&
-      volume1h === 'STRONG' &&
-      rsi1h >= 30
-    ) {
-      tradeAction = '🔴 VENDA AGORA';
-    } else if (
-      trend4h !== trend1h ||
-      signal.bias === 'WATCHLIST_BUY' ||
-      signal.bias === 'WATCHLIST_SELL'
-    ) {
-      tradeAction = '⏳ ESPERE CONFIRMAÇÃO';
-    } else {
-      tradeAction = '⚠️  ESPERE TENDÊNCIA';
-    }
+    const recommendation = getTradeAction(signal);
+    const tradeAction = recommendation.tradeAction;
 
     const message = `🚨 ALERTA DE SINAL BTC BOT
 
@@ -190,13 +263,20 @@ router.post('/alert-signal', async (_req, res) => {
       sent: true,
       minConfidence,
       tradeAction,
+      recommendationType: recommendation.recommendationType,
+      recommendationLabel: recommendation.recommendationLabel,
       serverTime,
       ticker,
-      signal,
+      signal: {
+        ...signal,
+        recommendationType: recommendation.recommendationType,
+        recommendationLabel: recommendation.recommendationLabel,
+        tradeAction: recommendation.tradeAction
+      },
       telegramResult
     });
   } catch (error) {
-    console.error('❌ ERRO alert-signal:', error);
+    console.error('⌛ ERRO alert-signal:', error);
     return res.status(500).json({ error: error.message });
   }
 });

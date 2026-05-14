@@ -223,9 +223,7 @@
     <div class="hero-signal hero-wait" id="heroSignal">
       <div class="hero-label">Recomendação principal</div>
       <div class="hero-value warn" id="heroRecommendation">Espere confirmação</div>
-      <div class="hero-meta" id="heroMeta">
-        Lendo dados do backend...
-      </div>
+      <div class="hero-meta" id="heroMeta">Lendo dados do backend...</div>
     </div>
 
     <div class="grid">
@@ -251,6 +249,12 @@
         <div class="label">Confiança</div>
         <div class="value" id="confidence">--</div>
         <div class="small">Pontuação do sinal</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Ação do bot</div>
+        <div class="value" id="tradeAction">--</div>
+        <div class="small">Mensagem operacional do Telegram</div>
       </div>
 
       <div class="card">
@@ -349,40 +353,23 @@
       return 'warn';
     }
 
-    function getRecommendation(bias) {
-      const normalized = String(bias || '').toUpperCase();
+    function getHeroClass(type) {
+      if (type === 'BUY_NOW') return 'hero-signal hero-buy';
+      if (type === 'SELL_NOW') return 'hero-signal hero-sell';
+      return 'hero-signal hero-wait';
+    }
 
-      if (
-        normalized.includes('STRONG_BUY') ||
-        normalized === 'BUY' ||
-        normalized.includes('WATCHLIST_BUY') ||
-        normalized.includes('BUY')
-      ) {
-        return {
-          text: 'Comprar agora',
-          heroClass: 'hero-signal hero-buy',
-          textClass: 'hero-value ok'
-        };
-      }
+    function getHeroTextClass(type) {
+      if (type === 'BUY_NOW') return 'hero-value ok';
+      if (type === 'SELL_NOW') return 'hero-value danger';
+      return 'hero-value warn';
+    }
 
-      if (
-        normalized.includes('STRONG_SELL') ||
-        normalized === 'SELL' ||
-        normalized.includes('WATCHLIST_SELL') ||
-        normalized.includes('SELL')
-      ) {
-        return {
-          text: 'Vender agora',
-          heroClass: 'hero-signal hero-sell',
-          textClass: 'hero-value danger'
-        };
-      }
-
-      return {
-        text: 'Espere confirmação',
-        heroClass: 'hero-signal hero-wait',
-        textClass: 'hero-value warn'
-      };
+    function getTradeActionClass(action) {
+      const normalized = String(action || '').toUpperCase();
+      if (normalized.includes('COMPRE')) return 'value ok';
+      if (normalized.includes('VENDA')) return 'value danger';
+      return 'value warn';
     }
 
     async function loadDashboard() {
@@ -406,6 +393,7 @@
           document.getElementById('symbol').textContent = '--';
           document.getElementById('bias').textContent = '--';
           document.getElementById('confidence').textContent = '--';
+          document.getElementById('tradeAction').textContent = '--';
           document.getElementById('strength').textContent = '--';
           document.getElementById('riskReward').textContent = '--';
           document.getElementById('entry').textContent = '--';
@@ -446,6 +434,10 @@
         confidenceEl.textContent = alert.confidence != null ? `${alert.confidence}%` : '--';
         confidenceEl.className = `value ${confidenceClass(alert.confidence)}`;
 
+        const tradeActionEl = document.getElementById('tradeAction');
+        tradeActionEl.textContent = alert.tradeAction ?? '--';
+        tradeActionEl.className = getTradeActionClass(alert.tradeAction);
+
         document.getElementById('strength').textContent = alert.strength ?? '--';
         document.getElementById('riskReward').textContent = alert.riskReward ?? '--';
         document.getElementById('entry').textContent = formatPrice(alert.entry);
@@ -471,20 +463,20 @@
 
         document.getElementById('alertJson').textContent = JSON.stringify(alert, null, 2);
 
-        const recommendation = getRecommendation(alert.bias);
         const hero = document.getElementById('heroSignal');
         const heroRecommendation = document.getElementById('heroRecommendation');
         const heroMeta = document.getElementById('heroMeta');
 
-        hero.className = recommendation.heroClass;
-        heroRecommendation.className = recommendation.textClass;
-        heroRecommendation.textContent = recommendation.text;
+        hero.className = getHeroClass(alert.recommendationType);
+        heroRecommendation.className = getHeroTextClass(alert.recommendationType);
+        heroRecommendation.textContent = alert.recommendationLabel ?? 'Espere confirmação';
         heroMeta.textContent =
-          `Bias do bot: ${alert.bias ?? '--'} · Confiança: ${alert.confidence ?? '--'}% · Força: ${alert.strength ?? '--'} · Última leitura: ${now.toLocaleTimeString('pt-BR')}`;
+          `Ação: ${alert.tradeAction ?? '--'} · Bias: ${alert.bias ?? '--'} · Confiança: ${alert.confidence ?? '--'}% · Última leitura: ${now.toLocaleTimeString('pt-BR')}`;
       } catch (error) {
         document.getElementById('backendStatus').textContent = 'Erro ❌';
         document.getElementById('backendStatus').className = 'value danger';
-        document.getElementById('backendText').textContent = `Falha ao carregar /health · ${now.toLocaleTimeString('pt-BR')}`;
+        document.getElementById('backendText').textContent =
+          `Falha ao carregar /health · ${now.toLocaleTimeString('pt-BR')}`;
         document.getElementById('lastUpdate').textContent = now.toLocaleTimeString('pt-BR');
         document.getElementById('noteText').textContent = 'Erro ao carregar dados do painel.';
         document.getElementById('statusLine').textContent =
