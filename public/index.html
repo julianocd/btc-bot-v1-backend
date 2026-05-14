@@ -494,11 +494,12 @@
     </div>
 
     <div class="footer-line">
-      A tela atualiza a cada 15 segundos. O dado operacional real depende do <strong>updatedAt</strong> vindo do backend.
+      A tela atualiza a cada 15 segundos. O dado operacional real depende do updatedAt vindo do backend remoto.
     </div>
   </div>
 
   <script>
+    const API_BASE = 'https://btc-bot-v1-backend.onrender.com';
     const REFRESH_EVERY_MS = 15000;
     let nextRefreshAt = Date.now() + REFRESH_EVERY_MS;
 
@@ -620,6 +621,83 @@
       });
     }
 
+    function setText(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    }
+
+    function setValueClass(id, text, cssClass = '') {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = text;
+      el.className = `value ${cssClass}`.trim();
+    }
+
+    function fillShortTerm(alert, now) {
+      const tf15m = alert?.shortTermIndicators?.['15m'] || {};
+      const tf5m = alert?.shortTermIndicators?.['5m'] || {};
+
+      const shortBias = alert?.shortTermBias ?? '--';
+      const shortConfidence = alert?.shortTermConfidence != null ? `${alert.shortTermConfidence}%` : '--';
+      const shortStrength = alert?.shortTermStrength ?? '--';
+      const shortRiskReward = alert?.shortTermRiskReward ?? '--';
+      const shortEntry = formatPrice(alert?.shortTermEntry);
+      const shortStopLoss = formatPrice(alert?.shortTermStopLoss);
+      const shortTakeProfit = formatPrice(alert?.shortTermTakeProfit);
+
+      setValueClass('shortBias', shortBias, biasClass(shortBias));
+      setValueClass('shortConfidence', shortConfidence, confidenceClass(alert?.shortTermConfidence));
+      setText('shortStrength', shortStrength);
+      setText('shortRiskReward', shortRiskReward);
+      setText('shortEntry', shortEntry);
+      setText('shortStopLoss', shortStopLoss);
+      setText('shortTakeProfit', shortTakeProfit);
+
+      setValueClass('trend15m', tf15m.trend ?? '--', trendClass(tf15m.trend));
+      setText(
+        'trend15mDetails',
+        `RSI ${tf15m.rsi14 ?? '--'} | MACD ${tf15m.macdState ?? '--'} | Volume ${tf15m.volumeState ?? '--'}`
+      );
+
+      setValueClass('trend5m', tf5m.trend ?? '--', trendClass(tf5m.trend));
+      setText(
+        'trend5mDetails',
+        `RSI ${tf5m.rsi14 ?? '--'} | MACD ${tf5m.macdState ?? '--'} | Volume ${tf5m.volumeState ?? '--'}`
+      );
+
+const isNoSetup = alert?.shortRecommendationType === 'SCALP_NO_SETUP';
+
+const shortAction = isNoSetup
+  ? '⚪ AGUARDE'
+  : (alert?.shortTradeAction || alert?.shortRecommendationLabel || 'Sem setup curto');
+
+const shortReason = isNoSetup
+  ? 'Sem setup curto no 15m/5m'
+  : (alert?.shortRecommendationLabel || '--');
+
+const shortCssClass = isNoSetup
+  ? 'warn'
+  : recommendationClass(shortAction);
+
+const actionEl = document.getElementById('shortTradeAction');
+if (actionEl) {
+  actionEl.textContent = shortAction;
+  actionEl.className = `recommendation-title ${shortCssClass}`;
+}
+
+setText(
+  'shortRecommendationText',
+  `Recomendação curta: ${shortReason} | Tipo: ${alert?.shortRecommendationType || '--'}`
+);
+
+      setText(
+        'shortStatusLine',
+        `Contexto curto: ${(alert?.shortTermTimeframeContext || []).join(' / ') || '--'} | Última leitura da tela: ${now.toLocaleTimeString('pt-BR')}`
+      );
+
+      setText('shortNoteText', alert?.shortNote || 'Sem observações curtas.');
+    }
+
     async function loadDashboard() {
       const now = new Date();
       const ts = now.getTime();
@@ -629,15 +707,23 @@
 
       try {
         const [healthRes, alertRes] = await Promise.all([
-          fetch(`/health?_ts=${ts}`, { cache: 'no-store' }),
-          fetch(`/market/alerts?_ts=${ts}`, { cache: 'no-store' })
+          fetch(`${API_BASE}/health?_ts=${ts}`, { cache: 'no-store' }),
+          fetch(`${API_BASE}/market/alerts?_ts=${ts}`, { cache: 'no-store' })
         ]);
+
+        if (!healthRes.ok) {
+          throw new Error(`Health HTTP ${healthRes.status}`);
+        }
+
+        if (!alertRes.ok) {
+          throw new Error(`Alerts HTTP ${alertRes.status}`);
+        }
 
         const health = await healthRes.json();
         const alertData = await alertRes.json();
 
-        document.getElementById('healthJson').textContent = JSON.stringify(health, null, 2);
-        document.getElementById('alertJson').textContent = JSON.stringify(alertData, null, 2);
+        setText('healthJson', JSON.stringify(health, null, 2));
+        setText('alertJson', JSON.stringify(alertData, null, 2));
 
         const healthBadge = document.getElementById('healthBadge');
         const backendStatus = document.getElementById('backendStatus');
@@ -645,196 +731,146 @@
         if (health.ok) {
           healthBadge.textContent = 'Health: saudável';
           healthBadge.className = 'badge badge-ok';
+
           backendStatus.textContent = 'Online ✅';
           backendStatus.className = 'value ok';
-          document.getElementById('backendText').textContent =
-            `Uptime ${formatUptime(health.uptime)} · ${now.toLocaleTimeString('pt-BR')}`;
 
-          document.getElementById('uptimeValue').textContent = formatUptime(health.uptime);
-          document.getElementById('uptimeDetails').textContent =
-            `Servidor iniciado em: ${formatDateTime(health.job?.startedAt)}`;
+          setText(
+            'backendText',
+            `Consulta no backend remoto · ${now.toLocaleTimeString('pt-BR')}`
+          );
 
-          document.getElementById('jobLastRun').textContent = formatDateTime(health.job?.lastRunAt);
-          document.getElementById('jobDetails').textContent =
-            `Último sucesso: ${formatDateTime(health.job?.lastSuccessAt)} | Último erro: ${formatDateTime(health.job?.lastErrorAt)}`;
+          setText('uptimeValue', health.uptime ? formatUptime(health.uptime) : '--');
+          setText(
+            'uptimeDetails',
+            `Servidor respondeu em: ${formatDateTime(health.timestamp)}`
+          );
 
-          document.getElementById('jobRuns').textContent = String(health.job?.runs ?? '--');
-          document.getElementById('jobRunsDetails').textContent =
-            `Sucessos: ${health.job?.successes ?? '--'} | Falhas: ${health.job?.failures ?? '--'}`;
+          setText('jobLastRun', health.job?.lastRunAt ? formatDateTime(health.job.lastRunAt) : '--');
+          setText(
+            'jobDetails',
+            `Último sucesso: ${health.job?.lastSuccessAt ? formatDateTime(health.job.lastSuccessAt) : '--'} | Último erro: ${health.job?.lastErrorAt ? formatDateTime(health.job.lastErrorAt) : '--'}`
+          );
+
+          setText('jobRuns', health.job?.runs != null ? String(health.job.runs) : '--');
+          setText(
+            'jobRunsDetails',
+            `Sucessos: ${health.job?.successes ?? '--'} | Falhas: ${health.job?.failures ?? '--'}`
+          );
         } else {
           healthBadge.textContent = 'Health: erro';
           healthBadge.className = 'badge badge-danger';
           backendStatus.textContent = 'Offline ❌';
           backendStatus.className = 'value danger';
-          document.getElementById('backendText').textContent =
-            `Health retornou erro · ${now.toLocaleTimeString('pt-BR')}`;
+          setText('backendText', `Health retornou erro · ${now.toLocaleTimeString('pt-BR')}`);
         }
 
         if (!alertData.ok || !alertData.alert) {
           updateFreshnessUI(null, 'unknown');
-
-          document.getElementById('symbol').textContent = '--';
-          document.getElementById('bias').textContent = '--';
-          document.getElementById('confidence').textContent = '--';
-          document.getElementById('strength').textContent = '--';
-          document.getElementById('riskReward').textContent = '--';
-          document.getElementById('entry').textContent = '--';
-          document.getElementById('stopLoss').textContent = '--';
-          document.getElementById('takeProfit').textContent = '--';
-          document.getElementById('lastRead').textContent = now.toLocaleTimeString('pt-BR');
-          document.getElementById('trend4h').textContent = '--';
-          document.getElementById('trend1h').textContent = '--';
-          document.getElementById('trend4hDetails').textContent = '--';
-          document.getElementById('trend1hDetails').textContent = '--';
-          document.getElementById('noteText').textContent = 'Nenhum alerta encontrado.';
-          document.getElementById('tradeAction').textContent = 'Aguardando sinal';
-          document.getElementById('tradeAction').className = 'recommendation-title warn';
-          document.getElementById('recommendationText').textContent = 'O backend respondeu, mas não retornou um alerta válido.';
-          document.getElementById('statusLine').textContent =
-            `Sem alerta válido · Última leitura: ${now.toLocaleTimeString('pt-BR')}`;
-
-          document.getElementById('shortTradeAction').textContent = 'Sem leitura curta';
-          document.getElementById('shortTradeAction').className = 'recommendation-title warn';
-          document.getElementById('shortRecommendationText').textContent = 'Ainda não há dados curtos disponíveis.';
-          document.getElementById('shortStatusLine').textContent = 'Aguardando dados...';
-          document.getElementById('shortBias').textContent = '--';
-          document.getElementById('shortConfidence').textContent = '--';
-          document.getElementById('shortStrength').textContent = '--';
-          document.getElementById('shortRiskReward').textContent = '--';
-          document.getElementById('shortEntry').textContent = '--';
-          document.getElementById('shortStopLoss').textContent = '--';
-          document.getElementById('shortTakeProfit').textContent = '--';
-          document.getElementById('trend15m').textContent = '--';
-          document.getElementById('trend5m').textContent = '--';
-          document.getElementById('trend15mDetails').textContent = '--';
-          document.getElementById('trend5mDetails').textContent = '--';
-          document.getElementById('shortNoteText').textContent = 'Nenhuma leitura curta retornada.';
-          return;
+          throw new Error('Payload de alertas inválido');
         }
 
         const alert = alertData.alert;
-        const tf4h = alert.indicators?.['4h'] || {};
-        const tf1h = alert.indicators?.['1h'] || {};
-        const tf15m = alert.shortTermIndicators?.['15m'] || {};
-        const tf5m = alert.shortTermIndicators?.['5m'] || {};
+        const tf4h = alert?.indicators?.['4h'] || {};
+        const tf1h = alert?.indicators?.['1h'] || {};
 
         updateFreshnessUI(alertData.updatedAt || alert.updatedAt, alertData.dataSource || alert.dataSource);
 
-        document.getElementById('symbol').textContent = alert.symbol ?? '--';
+        setText('symbol', alert.symbol ?? '--');
+        setValueClass('bias', alert.bias ?? '--', biasClass(alert.bias));
+        setValueClass(
+          'confidence',
+          alert.confidence != null ? `${alert.confidence}%` : '--',
+          confidenceClass(alert.confidence)
+        );
 
-        const biasEl = document.getElementById('bias');
-        biasEl.textContent = alert.bias ?? '--';
-        biasEl.className = `value ${biasClass(alert.bias)}`;
+        setText('strength', alert.strength ?? '--');
+        setText('riskReward', alert.riskReward ?? '--');
+        setText('entry', formatPrice(alert.entry));
+        setText('stopLoss', formatPrice(alert.stopLoss));
+        setText('takeProfit', formatPrice(alert.takeProfit));
+        setText('lastRead', now.toLocaleTimeString('pt-BR'));
 
-        const confidenceEl = document.getElementById('confidence');
-        confidenceEl.textContent = alert.confidence != null ? `${alert.confidence}%` : '--';
-        confidenceEl.className = `value ${confidenceClass(alert.confidence)}`;
+        setValueClass('trend4h', tf4h.trend ?? '--', trendClass(tf4h.trend));
+        setText(
+          'trend4hDetails',
+          `RSI ${tf4h.rsi14 ?? '--'} | MACD ${tf4h.macdState ?? '--'} | Volume ${tf4h.volumeState ?? '--'}`
+        );
 
-        document.getElementById('strength').textContent = alert.strength ?? '--';
-        document.getElementById('riskReward').textContent = alert.riskReward ?? '--';
-        document.getElementById('entry').textContent = formatPrice(alert.entry);
-        document.getElementById('stopLoss').textContent = formatPrice(alert.stopLoss);
-        document.getElementById('takeProfit').textContent = formatPrice(alert.takeProfit);
-        document.getElementById('lastRead').textContent = now.toLocaleTimeString('pt-BR');
+        setValueClass('trend1h', tf1h.trend ?? '--', trendClass(tf1h.trend));
+        setText(
+          'trend1hDetails',
+          `RSI ${tf1h.rsi14 ?? '--'} | MACD ${tf1h.macdState ?? '--'} | Volume ${tf1h.volumeState ?? '--'}`
+        );
 
-        const trend4hEl = document.getElementById('trend4h');
-        trend4hEl.textContent = tf4h.trend ?? '--';
-        trend4hEl.className = `value ${trendClass(tf4h.trend)}`;
-        document.getElementById('trend4hDetails').textContent =
-          `RSI ${tf4h.rsi14 ?? '--'} | MACD ${tf4h.macdState ?? '--'} | Volume ${tf4h.volumeState ?? '--'}`;
-
-        const trend1hEl = document.getElementById('trend1h');
-        trend1hEl.textContent = tf1h.trend ?? '--';
-        trend1hEl.className = `value ${trendClass(tf1h.trend)}`;
-        document.getElementById('trend1hDetails').textContent =
-          `RSI ${tf1h.rsi14 ?? '--'} | MACD ${tf1h.macdState ?? '--'} | Volume ${tf1h.volumeState ?? '--'}`;
-
-        document.getElementById('noteText').textContent = alert.note ?? 'Sem observações.';
+        setText('noteText', alert.note ?? 'Sem observações.');
 
         const action = alert.tradeAction || alert.recommendationLabel || 'Espere confirmação';
         const actionEl = document.getElementById('tradeAction');
-        actionEl.textContent = action;
-        actionEl.className = `recommendation-title ${recommendationClass(action)}`;
+        if (actionEl) {
+          actionEl.textContent = action;
+          actionEl.className = `recommendation-title ${recommendationClass(action)}`;
+        }
 
-        document.getElementById('recommendationText').textContent =
-          `Recomendação: ${alert.recommendationLabel || '--'} | Tipo: ${alert.recommendationType || '--'}`;
+        setText(
+          'recommendationText',
+          `Recomendação: ${alert.recommendationLabel || '--'} | Tipo: ${alert.recommendationType || '--'}`
+        );
 
-        document.getElementById('statusLine').textContent =
-          `Última leitura da tela: ${now.toLocaleTimeString('pt-BR')} | Dados do backend: ${formatDateTime(alertData.updatedAt || alert.updatedAt)} | Contexto: ${(alert.timeframeContext || []).join(' / ') || '--'}`;
+        setText(
+          'statusLine',
+          `Última leitura da tela: ${now.toLocaleTimeString('pt-BR')} | Dados do backend: ${formatDateTime(alertData.updatedAt || alert.updatedAt)} | Contexto: ${(alert.timeframeContext || []).join(' / ') || '--'}`
+        );
 
-        const shortBiasEl = document.getElementById('shortBias');
-        shortBiasEl.textContent = alert.shortTermBias ?? '--';
-        shortBiasEl.className = `value ${biasClass(alert.shortTermBias)}`;
-
-        const shortConfidenceEl = document.getElementById('shortConfidence');
-        shortConfidenceEl.textContent = alert.shortTermConfidence != null ? `${alert.shortTermConfidence}%` : '--';
-        shortConfidenceEl.className = `value ${confidenceClass(alert.shortTermConfidence)}`;
-
-        document.getElementById('shortStrength').textContent = alert.shortTermStrength ?? '--';
-        document.getElementById('shortRiskReward').textContent = alert.shortTermRiskReward ?? '--';
-        document.getElementById('shortEntry').textContent = formatPrice(alert.shortTermEntry);
-        document.getElementById('shortStopLoss').textContent = formatPrice(alert.shortTermStopLoss);
-        document.getElementById('shortTakeProfit').textContent = formatPrice(alert.shortTermTakeProfit);
-
-        const trend15mEl = document.getElementById('trend15m');
-        trend15mEl.textContent = tf15m.trend ?? '--';
-        trend15mEl.className = `value ${trendClass(tf15m.trend)}`;
-        document.getElementById('trend15mDetails').textContent =
-          `RSI ${tf15m.rsi14 ?? '--'} | MACD ${tf15m.macdState ?? '--'} | Volume ${tf15m.volumeState ?? '--'}`;
-
-        const trend5mEl = document.getElementById('trend5m');
-        trend5mEl.textContent = tf5m.trend ?? '--';
-        trend5mEl.className = `value ${trendClass(tf5m.trend)}`;
-        document.getElementById('trend5mDetails').textContent =
-          `RSI ${tf5m.rsi14 ?? '--'} | MACD ${tf5m.macdState ?? '--'} | Volume ${tf5m.volumeState ?? '--'}`;
-
-        const shortAction = alert.shortTradeAction || alert.shortRecommendationLabel || 'Aguarde gatilho';
-        const shortActionEl = document.getElementById('shortTradeAction');
-        shortActionEl.textContent = shortAction;
-        shortActionEl.className = `recommendation-title ${recommendationClass(shortAction)}`;
-
-        document.getElementById('shortRecommendationText').textContent =
-          `Recomendação curta: ${alert.shortRecommendationLabel || '--'} | Tipo: ${alert.shortRecommendationType || '--'}`;
-
-        document.getElementById('shortStatusLine').textContent =
-          `Contexto curto: ${(alert.shortTermTimeframeContext || []).join(' / ') || '--'} | Última leitura da tela: ${now.toLocaleTimeString('pt-BR')}`;
-
-        document.getElementById('shortNoteText').textContent = alert.shortNote ?? 'Sem observações curtas.';
+        fillShortTerm(alert, now);
       } catch (error) {
-        document.getElementById('backendStatus').textContent = 'Erro ❌';
-        document.getElementById('backendStatus').className = 'value danger';
-        document.getElementById('backendText').textContent =
-          `Falha ao consultar backend · ${now.toLocaleTimeString('pt-BR')}`;
+        setValueClass('backendStatus', 'Erro ❌', 'danger');
+        setText('backendText', `Falha ao consultar backend · ${now.toLocaleTimeString('pt-BR')}`);
 
-        document.getElementById('healthBadge').textContent = 'Health: indisponível';
-        document.getElementById('healthBadge').className = 'badge badge-danger';
+        const healthBadge = document.getElementById('healthBadge');
+        if (healthBadge) {
+          healthBadge.textContent = 'Health: indisponível';
+          healthBadge.className = 'badge badge-danger';
+        }
 
-        document.getElementById('sourceBadge').textContent = 'Fonte: indisponível';
-        document.getElementById('sourceBadge').className = 'badge badge-danger';
+        const sourceBadge = document.getElementById('sourceBadge');
+        if (sourceBadge) {
+          sourceBadge.textContent = 'Fonte: indisponível';
+          sourceBadge.className = 'badge badge-danger';
+        }
 
-        document.getElementById('freshnessBadge').textContent = 'Status dos dados: backend indisponível';
-        document.getElementById('freshnessBadge').className = 'badge badge-danger';
+        const freshnessBadge = document.getElementById('freshnessBadge');
+        if (freshnessBadge) {
+          freshnessBadge.textContent = 'Status dos dados: backend indisponível';
+          freshnessBadge.className = 'badge badge-danger';
+        }
 
-        document.getElementById('updatedAtBadge').textContent = 'Última atualização: erro';
-        document.getElementById('updatedAtBadge').className = 'badge badge-danger';
+        const updatedAtBadge = document.getElementById('updatedAtBadge');
+        if (updatedAtBadge) {
+          updatedAtBadge.textContent = 'Última atualização: erro';
+          updatedAtBadge.className = 'badge badge-danger';
+        }
 
-        document.getElementById('tradeAction').textContent = 'Backend indisponível';
-        document.getElementById('tradeAction').className = 'recommendation-title danger';
-        document.getElementById('recommendationText').textContent =
-          'Não foi possível carregar o último alerta principal.';
-        document.getElementById('statusLine').textContent =
-          `Falha na atualização · Última tentativa: ${now.toLocaleTimeString('pt-BR')}`;
-        document.getElementById('lastRead').textContent = now.toLocaleTimeString('pt-BR');
+        const actionEl = document.getElementById('tradeAction');
+        if (actionEl) {
+          actionEl.textContent = 'Backend indisponível';
+          actionEl.className = 'recommendation-title danger';
+        }
 
-        document.getElementById('shortTradeAction').textContent = 'Backend indisponível';
-        document.getElementById('shortTradeAction').className = 'recommendation-title danger';
-        document.getElementById('shortRecommendationText').textContent =
-          'Não foi possível carregar a leitura curta.';
-        document.getElementById('shortStatusLine').textContent =
-          `Falha na atualização curta · Última tentativa: ${now.toLocaleTimeString('pt-BR')}`;
+        setText('recommendationText', `Erro: ${error.message}`);
+        setText('statusLine', `Falha na atualização · Última tentativa: ${now.toLocaleTimeString('pt-BR')}`);
+        setText('lastRead', now.toLocaleTimeString('pt-BR'));
 
-        document.getElementById('alertJson').textContent = error.stack || error.message;
-        document.getElementById('healthJson').textContent = error.stack || error.message;
+        const shortActionEl = document.getElementById('shortTradeAction');
+        if (shortActionEl) {
+          shortActionEl.textContent = 'Backend indisponível';
+          shortActionEl.className = 'recommendation-title danger';
+        }
+
+        setText('shortRecommendationText', `Erro: ${error.message}`);
+        setText('shortStatusLine', `Falha na atualização curta · Última tentativa: ${now.toLocaleTimeString('pt-BR')}`);
+        setText('alertJson', error.stack || error.message);
+        setText('healthJson', error.stack || error.message);
       }
     }
 
