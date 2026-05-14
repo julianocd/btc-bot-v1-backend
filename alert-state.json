@@ -5,37 +5,80 @@
     "4h",
     "1h"
   ],
-  "entry": 79491.23,
-  "stopLoss": 78855.3,
-  "takeProfit": 80763.09,
+  "entry": 79590.12,
+  "stopLoss": 78953.4,
+  "takeProfit": 80863.56,
   "riskReward": 2,
   "confidence": 50,
   "strength": "LOW",
+  "shortTermBias": "NEUTRAL",
+  "shortTermTimeframeContext": [
+    "15m",
+    "5m"
+  ],
+  "shortTermConfidence": 40,
+  "shortTermStrength": "LOW",
+  "shortTermEntry": 79590.12,
+  "shortTermStopLoss": 78953.4,
+  "shortTermTakeProfit": 80863.56,
+  "shortTermRiskReward": 2,
+  "shortTradeAction": "⚪ SEM SETUP CURTO",
+  "shortRecommendationType": "SCALP_NO_SETUP",
+  "shortRecommendationLabel": "Sem setup curto",
   "indicators": {
     "4h": {
       "candles": 45,
       "trend": "NEUTRAL",
-      "rsi14": 40.93,
+      "rsi14": 41.81,
       "macdState": "BEARISH",
-      "macdLine": -302.9033,
-      "signalLine": -77.4618,
-      "histogram": -225.4415,
+      "macdLine": -295.0146,
+      "signalLine": -75.8841,
+      "histogram": -219.1305,
       "volumeState": "NEUTRAL",
       "confidence": 40,
       "strength": "LOW"
     },
     "1h": {
-      "candles": 178,
+      "candles": 179,
       "trend": "NEUTRAL",
-      "rsi14": 42.06,
+      "rsi14": 43.38,
       "macdState": "BULLISH",
-      "macdLine": -349.635,
-      "signalLine": -351.6288,
-      "histogram": 1.9939,
+      "macdLine": -318.6776,
+      "signalLine": -343.5431,
+      "histogram": 24.8655,
       "volumeState": "WEAK",
       "confidence": 60,
       "strength": "MEDIUM"
     }
   },
-  "note": "4h=NEUTRAL | 1h=NEUTRAL | MACD 4h=BEARISH | MACD 1h=BULLISH | VOL 4h=NEUTRAL | VOL 1h=WEAK | RSI 4h=40.9 | RSI 1h=42.1 | CONF=50"
+  "shortTermIndicators": {
+    "15m": {
+      "candles": 200,
+      "trend": "NEUTRAL",
+      "rsi14": 52.79,
+      "macdState": "BULLISH",
+      "macdLine": 19.3319,
+      "signalLine": -2.6101,
+      "histogram": 21.942,
+      "volumeState": "WEAK",
+      "confidence": 40,
+      "strength": "LOW"
+    },
+    "5m": {
+      "candles": 200,
+      "trend": "NEUTRAL",
+      "rsi14": 51.58,
+      "macdState": "BEARISH",
+      "macdLine": 24.5504,
+      "signalLine": 31.3818,
+      "histogram": -6.8314,
+      "volumeState": "WEAK",
+      "confidence": 40,
+      "strength": "LOW"
+    }
+  },
+  "note": "4h=NEUTRAL | 1h=NEUTRAL | MACD 4h=BEARISH | MACD 1h=BULLISH | VOL 4h=NEUTRAL | VOL 1h=WEAK | RSI 4h=41.8 | RSI 1h=43.4 | CONF=50",
+  "shortNote": "15m=NEUTRAL | 5m=NEUTRAL | MACD 15m=BULLISH | MACD 5m=BEARISH | VOL 15m=WEAK | VOL 5m=WEAK | RSI 15m=52.8 | RSI 5m=51.6 | CONF=40",
+  "updatedAt": "2026-05-14T02:51:52.767Z",
+  "dataSource": "binance"
 }

@@ -53,7 +53,7 @@ function getTradeAction(signal) {
   const alignedBullish = trend4h === 'BULLISH' && trend1h === 'BULLISH';
   const alignedBearish = trend4h === 'BEARISH' && trend1h === 'BEARISH';
 
-  if (signal.confidence < 70) {
+  if ((signal.confidence ?? 0) < 70) {
     return {
       tradeAction: 'NÃO OPERE',
       recommendationType: 'WAIT_CONFIRMATION',
@@ -78,7 +78,7 @@ function getTradeAction(signal) {
 
   if (
     signal.bias === 'BULLISH' &&
-    signal.confidence >= 70 &&
+    (signal.confidence ?? 0) >= 70 &&
     macd1h === 'BULLISH' &&
     volume1h === 'STRONG' &&
     rsi1h > 70
@@ -132,9 +132,22 @@ router.get('/snapshot', async (_req, res) => {
     ]);
 
     const signal = await buildPlaceholderSignal(ticker.lastPrice);
-    res.json({ serverTime, ticker, signal });
+
+    res.json({
+      ok: true,
+      meta: {
+        serverTime,
+        dataSource: ticker?.fallback || 'binance',
+        generatedAt: new Date().toISOString()
+      },
+      ticker,
+      signal
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
   }
 });
 
@@ -147,6 +160,8 @@ router.get('/alerts', async (_req, res) => {
 
     res.json({
       ok: true,
+      updatedAt: data.updatedAt || data.generatedAt || null,
+      dataSource: data.dataSource || 'unknown',
       alert: {
         ...data,
         recommendationType: recommendation.recommendationType,
@@ -174,9 +189,16 @@ router.post('/test-telegram', async (_req, res) => {
 Teste OK - Bot pronto para produção.`;
 
     const result = await sendTelegramMessage(message);
-    res.json({ ok: true, result });
+
+    res.json({
+      ok: true,
+      result
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
   }
 });
 
@@ -190,16 +212,11 @@ router.post('/alert-signal', async (_req, res) => {
     const signal = await buildPlaceholderSignal(ticker.lastPrice);
     const minConfidence = Number(env.alertMinConfidence ?? 60);
 
-    if (signal.confidence < minConfidence) {
-      return res.json({
-        ok: true,
-        sent: false,
-        reason: `Sinal abaixo da confiança mínima (${signal.confidence} < ${minConfidence})`,
-        serverTime,
-        ticker,
-        signal
-      });
-    }
+    const enrichedSignal = {
+      ...signal,
+      updatedAt: new Date().toISOString(),
+      dataSource: ticker?.fallback || 'binance'
+    };
 
     const ALERT_STATE_FILE = './alert-state.json';
 
@@ -208,76 +225,94 @@ router.post('/alert-signal', async (_req, res) => {
       const lastState = JSON.parse(data);
 
       const changed =
-        lastState.bias !== signal.bias ||
-        Math.abs(lastState.confidence - signal.confidence) >= 5;
+        lastState.bias !== enrichedSignal.bias ||
+        Math.abs((lastState.confidence ?? 0) - (enrichedSignal.confidence ?? 0)) >= 5 ||
+        Number(lastState.entry ?? 0) !== Number(enrichedSignal.entry ?? 0) ||
+        Number(lastState.stopLoss ?? 0) !== Number(enrichedSignal.stopLoss ?? 0) ||
+        Number(lastState.takeProfit ?? 0) !== Number(enrichedSignal.takeProfit ?? 0) ||
+        lastState.dataSource !== enrichedSignal.dataSource;
 
       if (!changed) {
-        console.log('🚫 Sinal duplicado - Bias igual, conf similar');
+        await writeFile(ALERT_STATE_FILE, JSON.stringify(enrichedSignal, null, 2));
+
         return res.json({
           ok: true,
           sent: false,
-          reason: 'Sinal duplicado, pulou alerta',
+          reason: 'Sinal duplicado, arquivo atualizado sem Telegram',
+          updatedAt: enrichedSignal.updatedAt,
+          dataSource: enrichedSignal.dataSource,
           serverTime,
           ticker,
-          signal
+          signal: enrichedSignal
         });
       }
-
-      await writeFile(ALERT_STATE_FILE, JSON.stringify(signal, null, 2));
-      console.log('✅ Estado atualizado:', signal.bias, signal.confidence);
     } catch (error) {
-      if (error.code === 'ENOENT') {
-        console.log('📝 Primeira execução, criando estado');
-        await writeFile(ALERT_STATE_FILE, JSON.stringify(signal, null, 2));
-      } else {
-        console.error('⌛ Erro estado:', error.message);
+      if (error.code !== 'ENOENT') {
+        console.error('⌛ Erro ao ler estado:', error.message);
       }
     }
 
-    const recommendation = getTradeAction(signal);
-    const tradeAction = recommendation.tradeAction;
+    await writeFile(ALERT_STATE_FILE, JSON.stringify(enrichedSignal, null, 2));
+
+    if (enrichedSignal.confidence < minConfidence) {
+      return res.json({
+        ok: true,
+        sent: false,
+        reason: `Sinal abaixo da confiança mínima (${enrichedSignal.confidence} < ${minConfidence})`,
+        updatedAt: enrichedSignal.updatedAt,
+        dataSource: enrichedSignal.dataSource,
+        serverTime,
+        ticker,
+        signal: enrichedSignal
+      });
+    }
+
+    const recommendation = getTradeAction(enrichedSignal);
+
+    const signalWithRecommendation = {
+      ...enrichedSignal,
+      recommendationType: recommendation.recommendationType,
+      recommendationLabel: recommendation.recommendationLabel,
+      tradeAction: recommendation.tradeAction
+    };
 
     const message = `🚨 ALERTA DE SINAL BTC BOT
 
-🔥 ${tradeAction}
+🔥 ${signalWithRecommendation.tradeAction}
 
-📊 Símbolo: ${signal.symbol}
-📈 Bias: ${signal.bias}
-🎯 Confiança: ${signal.confidence}%
-💪 Força: ${signal.strength}
+📊 Símbolo: ${signalWithRecommendation.symbol}
+📈 Bias: ${signalWithRecommendation.bias}
+🎯 Confiança: ${signalWithRecommendation.confidence}%
+💪 Força: ${signalWithRecommendation.strength}
 
-💰 Entry: ${signal.entry}
-🛑 Stop Loss: ${signal.stopLoss}
-✅ Take Profit: ${signal.takeProfit}
-⚖️ R/R: ${signal.riskReward}
+💰 Entry: ${signalWithRecommendation.entry}
+🛑 Stop Loss: ${signalWithRecommendation.stopLoss}
+✅ Take Profit: ${signalWithRecommendation.takeProfit}
+⚖️ R/R: ${signalWithRecommendation.riskReward}
 
-🕒 4h: ${signal.indicators?.['4h']?.trend ?? 'N/A'} | 1h: ${signal.indicators?.['1h']?.trend ?? 'N/A'}
-📝 ${signal.note}
-
-⏰ Timestamp: ${new Date().toISOString()}`;
+🛰️ Fonte: ${signalWithRecommendation.dataSource}
+🕒 Atualizado em: ${signalWithRecommendation.updatedAt}
+📝 ${signalWithRecommendation.note}`;
 
     const telegramResult = await sendTelegramMessage(message);
 
     return res.json({
       ok: true,
       sent: true,
+      updatedAt: signalWithRecommendation.updatedAt,
+      dataSource: signalWithRecommendation.dataSource,
       minConfidence,
-      tradeAction,
-      recommendationType: recommendation.recommendationType,
-      recommendationLabel: recommendation.recommendationLabel,
       serverTime,
       ticker,
-      signal: {
-        ...signal,
-        recommendationType: recommendation.recommendationType,
-        recommendationLabel: recommendation.recommendationLabel,
-        tradeAction: recommendation.tradeAction
-      },
+      signal: signalWithRecommendation,
       telegramResult
     });
   } catch (error) {
     console.error('⌛ ERRO alert-signal:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({
+      ok: false,
+      error: error.message
+    });
   }
 });
 

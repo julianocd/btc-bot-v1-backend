@@ -1,33 +1,20 @@
 import { env } from '../config/env.js';
 import { binanceRest } from './binance-rest.service.js';
 
-function normalizeNumber(value, fallback = 0) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
-
 function toCloses(klines) {
-  return (klines || [])
-    .map((k) => normalizeNumber(k?.[4], NaN))
-    .filter(Number.isFinite);
+  return klines.map((k) => Number(k[4]));
 }
 
 function toVolumes(klines) {
-  return (klines || [])
-    .map((k) => normalizeNumber(k?.[5], 0))
-    .filter((n) => Number.isFinite(n));
+  return klines.map((k) => Number(k[5]));
 }
 
 function toHighs(klines) {
-  return (klines || [])
-    .map((k) => normalizeNumber(k?.[2], NaN))
-    .filter(Number.isFinite);
+  return klines.map((k) => Number(k[2]));
 }
 
 function toLows(klines) {
-  return (klines || [])
-    .map((k) => normalizeNumber(k?.[3], NaN))
-    .filter(Number.isFinite);
+  return klines.map((k) => Number(k[3]));
 }
 
 function average(values) {
@@ -89,9 +76,7 @@ function macd(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
 
   const offset = slowPeriod - fastPeriod;
   const alignedFast = fast.slice(offset);
-  const macdSeries = slow
-    .map((slowValue, index) => alignedFast[index] - slowValue)
-    .filter(Number.isFinite);
+  const macdSeries = slow.map((slowValue, index) => alignedFast[index] - slowValue);
 
   if (!macdSeries.length) {
     return {
@@ -170,9 +155,7 @@ function rsi(values, period = 14) {
 }
 
 function volumeAnalysis(volumes) {
-  const cleanVolumes = (volumes || []).filter((v) => Number.isFinite(v));
-
-  if (!cleanVolumes.length) {
+  if (!volumes || volumes.length < 20) {
     return {
       lastVolume: null,
       avg5: null,
@@ -181,18 +164,9 @@ function volumeAnalysis(volumes) {
     };
   }
 
-  if (cleanVolumes.length < 20) {
-    return {
-      lastVolume: cleanVolumes.at(-1) ?? null,
-      avg5: average(cleanVolumes.slice(-5)),
-      avg20: average(cleanVolumes),
-      state: 'NEUTRAL'
-    };
-  }
-
-  const lastVolume = cleanVolumes.at(-1);
-  const avg5 = average(cleanVolumes.slice(-5));
-  const avg20 = average(cleanVolumes.slice(-20));
+  const lastVolume = volumes.at(-1);
+  const avg5 = average(volumes.slice(-5));
+  const avg20 = average(volumes.slice(-20));
 
   let state = 'NEUTRAL';
   if (avg5 != null && avg20 != null) {
@@ -335,7 +309,7 @@ function levels(price, bias, highs = [], lows = [], closes = []) {
   const maxStopPct = 0.015;
   const maxTpPct = 0.03;
 
-  if (bias === 'BULLISH' || bias === 'WATCHLIST_BUY') {
+  if (bias === 'BULLISH' || bias === 'WATCHLIST_BUY' || bias === 'SCALP_BUY') {
     const rawStop = Math.min(s1, recentLow, price * (1 - 0.006));
     const stopLoss = +Math.max(rawStop, price * (1 - maxStopPct)).toFixed(2);
     const rawTp = Math.max(r1, price + ((price - stopLoss) * riskReward));
@@ -343,7 +317,7 @@ function levels(price, bias, highs = [], lows = [], closes = []) {
     return { entry, stopLoss, takeProfit, riskReward };
   }
 
-  if (bias === 'BEARISH' || bias === 'WATCHLIST_SELL') {
+  if (bias === 'BEARISH' || bias === 'WATCHLIST_SELL' || bias === 'SCALP_SELL') {
     const rawStop = Math.max(r1, recentHigh, price * (1 + 0.006));
     const stopLoss = +Math.min(rawStop, price * (1 + maxStopPct)).toFixed(2);
     const rawTp = Math.min(s1, price - ((stopLoss - price) * riskReward));
@@ -359,23 +333,111 @@ function levels(price, bias, highs = [], lows = [], closes = []) {
   };
 }
 
+function getShortTermBias(analysis15m, analysis5m) {
+  if (analysis15m.trend === 'BULLISH' && analysis5m.trend === 'BULLISH') {
+    return 'SCALP_BUY';
+  }
+
+  if (analysis15m.trend === 'BEARISH' && analysis5m.trend === 'BEARISH') {
+    return 'SCALP_SELL';
+  }
+
+  if (
+    analysis15m.trend === 'BULLISH' &&
+    analysis5m.macdState === 'BULLISH' &&
+    analysis5m.rsi14 != null &&
+    analysis5m.rsi14 >= 50 &&
+    analysis5m.rsi14 <= 72
+  ) {
+    return 'WATCH_SCALP_BUY';
+  }
+
+  if (
+    analysis15m.trend === 'BEARISH' &&
+    analysis5m.macdState === 'BEARISH' &&
+    analysis5m.rsi14 != null &&
+    analysis5m.rsi14 <= 50 &&
+    analysis5m.rsi14 >= 28
+  ) {
+    return 'WATCH_SCALP_SELL';
+  }
+
+  return 'NEUTRAL';
+}
+
+function getShortTradeAction(shortBias, shortConfidence, analysis15m, analysis5m) {
+  if (
+    shortBias === 'SCALP_BUY' &&
+    shortConfidence >= 70 &&
+    analysis5m.volumeState === 'STRONG' &&
+    analysis5m.macdState === 'BULLISH'
+  ) {
+    return {
+      tradeAction: '🟢 COMPRA RÁPIDA',
+      recommendationType: 'SCALP_BUY_NOW',
+      recommendationLabel: 'Compra curta agora'
+    };
+  }
+
+  if (
+    shortBias === 'SCALP_SELL' &&
+    shortConfidence >= 70 &&
+    analysis5m.volumeState === 'STRONG' &&
+    analysis5m.macdState === 'BEARISH'
+  ) {
+    return {
+      tradeAction: '🔴 VENDA RÁPIDA',
+      recommendationType: 'SCALP_SELL_NOW',
+      recommendationLabel: 'Venda curta agora'
+    };
+  }
+
+  if (shortBias === 'WATCH_SCALP_BUY' || shortBias === 'WATCH_SCALP_SELL') {
+    return {
+      tradeAction: '🟡 AGUARDE GATILHO',
+      recommendationType: 'SCALP_WAIT_TRIGGER',
+      recommendationLabel: 'Aguarde gatilho curto'
+    };
+  }
+
+  return {
+    tradeAction: '⚪ SEM SETUP CURTO',
+    recommendationType: 'SCALP_NO_SETUP',
+    recommendationLabel: 'Sem setup curto'
+  };
+}
+
 export async function buildPlaceholderSignal(lastPrice) {
-  const [klines4h, klines1h] = await Promise.all([
+  const [klines4h, klines1h, klines15m, klines5m] = await Promise.all([
     binanceRest.klines(env.binanceSymbol, '4h', 200),
-    binanceRest.klines(env.binanceSymbol, '1h', 200)
+    binanceRest.klines(env.binanceSymbol, '1h', 200),
+    binanceRest.klines(env.binanceSymbol, '15m', 200),
+    binanceRest.klines(env.binanceSymbol, '5m', 200)
   ]);
 
   const closes4h = toCloses(klines4h);
   const closes1h = toCloses(klines1h);
+  const closes15m = toCloses(klines15m);
+  const closes5m = toCloses(klines5m);
+
   const highs4h = toHighs(klines4h);
   const lows4h = toLows(klines4h);
   const highs1h = toHighs(klines1h);
   const lows1h = toLows(klines1h);
+  const highs15m = toHighs(klines15m);
+  const lows15m = toLows(klines15m);
+  const highs5m = toHighs(klines5m);
+  const lows5m = toLows(klines5m);
+
   const volumes4h = toVolumes(klines4h);
   const volumes1h = toVolumes(klines1h);
+  const volumes15m = toVolumes(klines15m);
+  const volumes5m = toVolumes(klines5m);
 
   const analysis4h = analyze(closes4h, volumes4h);
   const analysis1h = analyze(closes1h, volumes1h);
+  const analysis15m = analyze(closes15m, volumes15m);
+  const analysis5m = analyze(closes5m, volumes5m);
 
   let bias = 'NEUTRAL';
 
@@ -397,11 +459,19 @@ export async function buildPlaceholderSignal(lastPrice) {
     bias = 'WATCHLIST_SELL';
   }
 
-  const price = Number(lastPrice || analysis1h.last || analysis4h.last || 0);
+  const shortTermBias = getShortTermBias(analysis15m, analysis5m);
+
+  const price = Number(lastPrice || analysis5m.last || analysis1h.last || analysis4h.last || 0);
+
   const tradeLevels = levels(price, bias, highs1h, lows1h, closes1h);
+  const shortTradeLevels = levels(price, shortTermBias, highs5m, lows5m, closes5m);
 
   const combinedConfidence = Math.round((analysis4h.confidence * 0.5) + (analysis1h.confidence * 0.5));
   const combinedStrength = strengthLabel(combinedConfidence);
+
+  const shortTermConfidence = Math.round((analysis15m.confidence * 0.45) + (analysis5m.confidence * 0.55));
+  const shortTermStrength = strengthLabel(shortTermConfidence);
+  const shortTrade = getShortTradeAction(shortTermBias, shortTermConfidence, analysis15m, analysis5m);
 
   return {
     symbol: env.binanceSymbol,
@@ -413,6 +483,19 @@ export async function buildPlaceholderSignal(lastPrice) {
     riskReward: tradeLevels.riskReward,
     confidence: combinedConfidence,
     strength: combinedStrength,
+
+    shortTermBias,
+    shortTermTimeframeContext: ['15m', '5m'],
+    shortTermConfidence,
+    shortTermStrength,
+    shortTermEntry: shortTradeLevels.entry,
+    shortTermStopLoss: shortTradeLevels.stopLoss,
+    shortTermTakeProfit: shortTradeLevels.takeProfit,
+    shortTermRiskReward: shortTradeLevels.riskReward,
+    shortTradeAction: shortTrade.tradeAction,
+    shortRecommendationType: shortTrade.recommendationType,
+    shortRecommendationLabel: shortTrade.recommendationLabel,
+
     indicators: {
       '4h': {
         candles: closes4h.length,
@@ -439,6 +522,36 @@ export async function buildPlaceholderSignal(lastPrice) {
         strength: analysis1h.strength
       }
     },
-    note: `4h=${analysis4h.trend} | 1h=${analysis1h.trend} | MACD 4h=${analysis4h.macdState} | MACD 1h=${analysis1h.macdState} | VOL 4h=${analysis4h.volumeState} | VOL 1h=${analysis1h.volumeState} | RSI 4h=${analysis4h.rsi14 != null ? analysis4h.rsi14.toFixed(1) : 'n/a'} | RSI 1h=${analysis1h.rsi14 != null ? analysis1h.rsi14.toFixed(1) : 'n/a'} | CONF=${combinedConfidence}`
+
+    shortTermIndicators: {
+      '15m': {
+        candles: closes15m.length,
+        trend: analysis15m.trend,
+        rsi14: analysis15m.rsi14 != null ? +analysis15m.rsi14.toFixed(2) : null,
+        macdState: analysis15m.macdState,
+        macdLine: analysis15m.macdLine != null ? +analysis15m.macdLine.toFixed(4) : null,
+        signalLine: analysis15m.signalLine != null ? +analysis15m.signalLine.toFixed(4) : null,
+        histogram: analysis15m.histogram != null ? +analysis15m.histogram.toFixed(4) : null,
+        volumeState: analysis15m.volumeState,
+        confidence: analysis15m.confidence,
+        strength: analysis15m.strength
+      },
+      '5m': {
+        candles: closes5m.length,
+        trend: analysis5m.trend,
+        rsi14: analysis5m.rsi14 != null ? +analysis5m.rsi14.toFixed(2) : null,
+        macdState: analysis5m.macdState,
+        macdLine: analysis5m.macdLine != null ? +analysis5m.macdLine.toFixed(4) : null,
+        signalLine: analysis5m.signalLine != null ? +analysis5m.signalLine.toFixed(4) : null,
+        histogram: analysis5m.histogram != null ? +analysis5m.histogram.toFixed(4) : null,
+        volumeState: analysis5m.volumeState,
+        confidence: analysis5m.confidence,
+        strength: analysis5m.strength
+      }
+    },
+
+    note: `4h=${analysis4h.trend} | 1h=${analysis1h.trend} | MACD 4h=${analysis4h.macdState} | MACD 1h=${analysis1h.macdState} | VOL 4h=${analysis4h.volumeState} | VOL 1h=${analysis1h.volumeState} | RSI 4h=${analysis4h.rsi14 != null ? analysis4h.rsi14.toFixed(1) : 'n/a'} | RSI 1h=${analysis1h.rsi14 != null ? analysis1h.rsi14.toFixed(1) : 'n/a'} | CONF=${combinedConfidence}`,
+
+    shortNote: `15m=${analysis15m.trend} | 5m=${analysis5m.trend} | MACD 15m=${analysis15m.macdState} | MACD 5m=${analysis5m.macdState} | VOL 15m=${analysis15m.volumeState} | VOL 5m=${analysis5m.volumeState} | RSI 15m=${analysis15m.rsi14 != null ? analysis15m.rsi14.toFixed(1) : 'n/a'} | RSI 5m=${analysis5m.rsi14 != null ? analysis5m.rsi14.toFixed(1) : 'n/a'} | CONF=${shortTermConfidence}`
   };
 }
