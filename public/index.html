@@ -321,6 +321,12 @@
         </div>
 
         <div class="card">
+          <div class="label">Preço BTC agora</div>
+          <div class="value" id="btcPrice">--</div>
+          <div class="small">Cotação atual retornada pelo backend</div>
+        </div>
+
+        <div class="card">
           <div class="label">Bias principal</div>
           <div class="value" id="bias">--</div>
           <div class="small">Leitura 4h / 1h</div>
@@ -499,7 +505,7 @@
   </div>
 
   <script>
-    const API_BASE = 'https://btc-bot-v1-backend.onrender.com';
+    const API_BASE = '';
     const REFRESH_EVERY_MS = 15000;
     let nextRefreshAt = Date.now() + REFRESH_EVERY_MS;
 
@@ -665,30 +671,30 @@
         `RSI ${tf5m.rsi14 ?? '--'} | MACD ${tf5m.macdState ?? '--'} | Volume ${tf5m.volumeState ?? '--'}`
       );
 
-const isNoSetup = alert?.shortRecommendationType === 'SCALP_NO_SETUP';
+      const isNoSetup = alert?.shortRecommendationType === 'SCALP_NO_SETUP';
 
-const shortAction = isNoSetup
-  ? '⚪ AGUARDE'
-  : (alert?.shortTradeAction || alert?.shortRecommendationLabel || 'Sem setup curto');
+      const shortAction = isNoSetup
+        ? '⚪ AGUARDE'
+        : (alert?.shortTradeAction || alert?.shortRecommendationLabel || 'Sem setup curto');
 
-const shortReason = isNoSetup
-  ? 'Sem setup curto no 15m/5m'
-  : (alert?.shortRecommendationLabel || '--');
+      const shortReason = isNoSetup
+        ? 'Sem setup curto no 15m/5m'
+        : (alert?.shortRecommendationLabel || '--');
 
-const shortCssClass = isNoSetup
-  ? 'warn'
-  : recommendationClass(shortAction);
+      const shortCssClass = isNoSetup
+        ? 'warn'
+        : recommendationClass(shortAction);
 
-const actionEl = document.getElementById('shortTradeAction');
-if (actionEl) {
-  actionEl.textContent = shortAction;
-  actionEl.className = `recommendation-title ${shortCssClass}`;
-}
+      const actionEl = document.getElementById('shortTradeAction');
+      if (actionEl) {
+        actionEl.textContent = shortAction;
+        actionEl.className = `recommendation-title ${shortCssClass}`;
+      }
 
-setText(
-  'shortRecommendationText',
-  `Recomendação curta: ${shortReason} | Tipo: ${alert?.shortRecommendationType || '--'}`
-);
+      setText(
+        'shortRecommendationText',
+        `Recomendação curta: ${shortReason} | Tipo: ${alert?.shortRecommendationType || '--'}`
+      );
 
       setText(
         'shortStatusLine',
@@ -721,6 +727,17 @@ setText(
 
         const health = await healthRes.json();
         const alertData = await alertRes.json();
+
+        setText(
+          'btcPrice',
+          alertData?.btcPriceUsd != null
+            ? Number(alertData.btcPriceUsd).toLocaleString('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                maximumFractionDigits: 0
+              })
+            : '--'
+        );
 
         setText('healthJson', JSON.stringify(health, null, 2));
         setText('alertJson', JSON.stringify(alertData, null, 2));

@@ -158,10 +158,23 @@ router.get('/alerts', async (_req, res) => {
     const data = JSON.parse(content);
     const recommendation = getTradeAction(data);
 
+    let btcPriceUsd = null;
+
+    try {
+      const priceRes = await fetch(
+        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd'
+      );
+      const priceData = await priceRes.json();
+      btcPriceUsd = priceData?.bitcoin?.usd ?? null;
+    } catch (_priceError) {
+      btcPriceUsd = null;
+    }
+
     res.json({
       ok: true,
       updatedAt: data.updatedAt || data.generatedAt || null,
       dataSource: data.dataSource || 'unknown',
+      btcPriceUsd,
       alert: {
         ...data,
         recommendationType: recommendation.recommendationType,
@@ -177,7 +190,6 @@ router.get('/alerts', async (_req, res) => {
     });
   }
 });
-
 router.post('/test-telegram', async (_req, res) => {
   try {
     const message = `🔔 Teste de alerta BTC Bot

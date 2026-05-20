@@ -1,177 +1,93 @@
-import app from './app.js';
-import { env } from './config/env.js';
-import { logger } from './utils/logger.js';
-import { readFile, writeFile } from 'fs/promises';
-import { binanceRest } from './services/binance-rest.service.js';
-import { buildPlaceholderSignal } from './services/signal-engine.service.js';
-import { sendTelegramMessage } from './services/telegram.service.js';
+import dotenv from 'dotenv';
+import express from 'express';
+import path from 'path';
+import fs from 'fs';
+import cors from 'cors';
+import { fileURLToPath } from 'url';
+import marketRoutes from './routes/market.routes.js';
 
-const ALERT_STATE_FILE = './alert-state.json';
-const INTERVAL_MS = 15 * 60 * 1000;
+dotenv.config();
 
-const jobState = {
-  startedAt: new Date().toISOString(),
-  lastRunAt: null,
-  lastSuccessAt: null,
-  lastErrorAt: null,
-  lastErrorMessage: null,
-  lastSignalBias: null,
-  lastSignalConfidence: null,
-  lastDataSource: null,
-  runs: 0,
-  successes: 0,
-  failures: 0
-};
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-async function runSignalJob() {
-  jobState.lastRunAt = new Date().toISOString();
-  jobState.runs += 1;
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-  try {
-    logger.info(`[CRON] Rodando job de sinal: ${jobState.lastRunAt}`);
+app.disable('x-powered-by');
 
-    const ticker = await binanceRest.ticker24h(env.binanceSymbol);
-    const signal = await buildPlaceholderSignal(ticker.lastPrice);
-    const minConfidence = Number(env.alertMinConfidence ?? 60);
+app.use(cors());
+app.use(express.json());
 
-    const enrichedSignal = {
-      ...signal,
-      updatedAt: new Date().toISOString(),
-      dataSource: ticker?.fallback || 'binance'
-    };
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
 
-    jobState.lastSignalBias = enrichedSignal.bias;
-    jobState.lastSignalConfidence = enrichedSignal.confidence;
-    jobState.lastDataSource = enrichedSignal.dataSource;
-
-    let lastState = null;
-
-    try {
-      const lastContent = await readFile(ALERT_STATE_FILE, 'utf8');
-      lastState = JSON.parse(lastContent);
-    } catch (error) {
-      if (error.code !== 'ENOENT') {
-        logger.error({ error: error.message }, '[CRON] Erro ao ler estado anterior');
-      }
+app.use(express.static(path.join(__dirname, '../public'), {
+  etag: false,
+  lastModified: false,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('Surrogate-Control', 'no-store');
     }
-
-    const changed =
-      !lastState ||
-      lastState.bias !== enrichedSignal.bias ||
-      Math.abs((lastState.confidence ?? 0) - (enrichedSignal.confidence ?? 0)) >= 5 ||
-      Number(lastState.entry ?? 0) !== Number(enrichedSignal.entry ?? 0) ||
-      Number(lastState.stopLoss ?? 0) !== Number(enrichedSignal.stopLoss ?? 0) ||
-      Number(lastState.takeProfit ?? 0) !== Number(enrichedSignal.takeProfit ?? 0) ||
-      lastState.dataSource !== enrichedSignal.dataSource;
-
-    await writeFile(ALERT_STATE_FILE, JSON.stringify(enrichedSignal, null, 2));
-    logger.info(
-      `[CRON] Estado atualizado: ${enrichedSignal.bias} | conf: ${enrichedSignal.confidence} | source: ${enrichedSignal.dataSource}`
-    );
-
-    jobState.lastSuccessAt = new Date().toISOString();
-    jobState.lastErrorAt = null;
-    jobState.lastErrorMessage = null;
-    jobState.successes += 1;
-
-    if (!changed) {
-      logger.info('[CRON] Sinal igual ao anterior, arquivo atualizado sem Telegram');
-      return;
-    }
-
-    if (enrichedSignal.confidence < minConfidence) {
-      logger.info(
-        `[CRON] Confiança baixa (${enrichedSignal.confidence}), arquivo atualizado sem enviar Telegram`
-      );
-      return;
-    }
-
-    const message = `🤖 SINAL AUTOMÁTICO BTC BOT
-
-📊 Símbolo: ${enrichedSignal.symbol}
-📈 Bias: ${enrichedSignal.bias}
-🎯 Confiança: ${enrichedSignal.confidence}%
-💪 Força: ${enrichedSignal.strength}
-
-💰 Entry: ${enrichedSignal.entry}
-🛑 Stop: ${enrichedSignal.stopLoss}
-✅ TP: ${enrichedSignal.takeProfit}
-⚖️ R/R: ${enrichedSignal.riskReward}
-
-🛰️ Fonte: ${enrichedSignal.dataSource}
-🕒 Atualizado em: ${enrichedSignal.updatedAt}`;
-
-    await sendTelegramMessage(message);
-    logger.info('[CRON] Telegram enviado');
-  } catch (error) {
-    jobState.lastErrorAt = new Date().toISOString();
-    jobState.lastErrorMessage = error.message;
-    jobState.failures += 1;
-    logger.error({ error: error.message }, '[CRON] Erro no job');
   }
-}
+}));
 
-app.get('/health', async (_req, res) => {
+app.get('/health', (req, res) => {
   try {
-    let alertState = null;
+    const filePath = path.join(__dirname, '../alert-state.json');
+    const content = fs.readFileSync(filePath, 'utf8');
+    const alertState = JSON.parse(content);
 
-    try {
-      const content = await readFile(ALERT_STATE_FILE, 'utf8');
-      alertState = JSON.parse(content);
-    } catch (error) {
-      if (error.code !== 'ENOENT') {
-        logger.error({ error: error.message }, '[HEALTH] Erro ao ler alert-state.json');
-      }
-    }
-
-    res.json({
+    return res.json({
       ok: true,
-      status: 'healthy',
-      uptime: process.uptime(),
+      service: 'btc-bot-v1-backend',
       timestamp: new Date().toISOString(),
-      service: 'btc-bot-backend',
-      version: '1.0.0',
-      job: {
-        intervalMs: INTERVAL_MS,
-        intervalMinutes: INTERVAL_MS / 60000,
-        ...jobState
-      },
-      alertState: alertState
-        ? {
-            updatedAt: alertState.updatedAt ?? null,
-            dataSource: alertState.dataSource ?? null,
-            bias: alertState.bias ?? null,
-            confidence: alertState.confidence ?? null
-          }
-        : null
+      uptime: process.uptime(),
+      env: process.env.NODE_ENV || 'development',
+      hasAlertState: true,
+      alertUpdatedAt: alertState?.updatedAt || alertState?.generatedAt || null
     });
   } catch (error) {
-    res.status(500).json({
-      ok: false,
-      status: 'unhealthy',
-      uptime: process.uptime(),
+    return res.json({
+      ok: true,
+      service: 'btc-bot-v1-backend',
       timestamp: new Date().toISOString(),
-      error: error.message
+      uptime: process.uptime(),
+      env: process.env.NODE_ENV || 'development',
+      hasAlertState: false,
+      alertUpdatedAt: null
     });
   }
 });
 
-app.listen(env.port, () => {
-  logger.info(`Server running on http://localhost:${env.port}`);
+app.use('/market', marketRoutes);
 
-  runSignalJob().catch((error) => {
-    jobState.lastErrorAt = new Date().toISOString();
-    jobState.lastErrorMessage = error.message;
-    jobState.failures += 1;
-    logger.error({ error: error.message }, '[CRON] Erro na execução inicial');
-  });
+app.get('/', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.sendFile(path.join(__dirname, '../public', 'index.html'));
+});
 
-  setInterval(() => {
-    runSignalJob().catch((error) => {
-      jobState.lastErrorAt = new Date().toISOString();
-      jobState.lastErrorMessage = error.message;
-      jobState.failures += 1;
-      logger.error({ error: error.message }, '[CRON] Erro na execução agendada');
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/market') || req.path === '/health') {
+    return res.status(404).json({
+      ok: false,
+      error: 'Route not found'
     });
-  }, INTERVAL_MS);
+  }
+
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.sendFile(path.join(__dirname, '../public', 'index.html'));
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
