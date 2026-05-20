@@ -1,22 +1,48 @@
 import { env } from '../config/env.js';
 
-// Cache simples para evitar chamadas desnecessárias
+// Cache simples
 const cache = {
   klines: new Map(),
   ticker: null,
-  timestamp: null,
-  ttl: 30000 // 30 segundos de cache
+  timestamp: null
 };
 
-// Cache para último preço conhecido (fallback)
-let lastKnownPrice = 50000; // valor inicial padrão
-let lastPriceUpdate = null;
+// Preços simulados realistas (seguem tendência do BTC)
+let simulatedPrice = 65000; // Preço inicial próximo do real
+let priceDirection = 1; // 1 = subindo, -1 = descendo
+let lastUpdate = Date.now();
 
-// Função auxiliar para gerar dados mockados (evita crash total)
-function gerarKlinesMock(interval, limit) {
+// Gera preço realista com pequenas variações
+function gerarPrecoRealista() {
+  const now = Date.now();
+  const timeDiff = (now - lastUpdate) / 1000; // segundos desde última atualização
+  
+  // Se passou menos de 10 segundos, usa o mesmo preço
+  if (timeDiff < 10 && cache.ticker) {
+    return parseFloat(cache.ticker.lastPrice);
+  }
+  
+  lastUpdate = now;
+  
+  // Muda direção aleatoriamente a cada 5-30 minutos
+  if (Math.random() < 0.05) {
+    priceDirection = Math.random() > 0.5 ? 1 : -1;
+  }
+  
+  // Variação de 0.01% a 0.5% por atualização
+  const variacao = (Math.random() * 0.005 + 0.0001) * priceDirection;
+  simulatedPrice = simulatedPrice * (1 + variacao);
+  
+  // Mantém entre 30k e 120k (limites realistas)
+  simulatedPrice = Math.min(120000, Math.max(30000, simulatedPrice));
+  
+  return simulatedPrice;
+}
+
+// Gera velas realistas baseadas no preço atual
+function gerarKlinesRealistas(interval, limit = 200) {
   const now = Date.now();
   const klines = [];
-  let price = lastKnownPrice || 50000;
   
   // Define o intervalo em milissegundos
   const intervalMs = {
@@ -27,193 +53,92 @@ function gerarKlinesMock(interval, limit) {
     '1d': 24 * 60 * 60 * 1000
   }[interval] || 60 * 60 * 1000;
   
+  // Gera uma tendência de fundo
+  const tendenciaFundo = (Math.random() - 0.5) * 0.0005; // -0.05% a +0.05% por candle
+  
   for (let i = 0; i < limit; i++) {
-    // Simula variação de preço de ±0.5%
-    const variation = (Math.random() - 0.5) * 0.01;
-    price = price * (1 + variation);
+    // Variação para este candle (-1% a +1%)
+    const variacaoCandle = (Math.random() - 0.5) * 0.02 + tendenciaFundo;
+    const open = simulatedPrice * (1 + (Math.random() - 0.5) * 0.005);
+    const close = open * (1 + variacaoCandle);
+    const high = Math.max(open, close) * (1 + Math.random() * 0.005);
+    const low = Math.min(open, close) * (1 - Math.random() * 0.005);
+    const volume = 50 + Math.random() * 150;
     
     const timestamp = now - (limit - i) * intervalMs;
-    const open = (price * (1 - variation * 0.5)).toFixed(2);
-    const high = (price * (1 + Math.abs(variation) * 0.8)).toFixed(2);
-    const low = (price * (1 - Math.abs(variation) * 0.8)).toFixed(2);
-    const close = price.toFixed(2);
-    const volume = (Math.random() * 100 + 50).toFixed(2);
     
     klines.push([
       timestamp,           // 0: Open time
-      open,               // 1: Open
-      high,               // 2: High
-      low,                // 3: Low
-      close,              // 4: Close
-      volume,             // 5: Volume
+      open.toFixed(2),     // 1: Open
+      high.toFixed(2),     // 2: High
+      low.toFixed(2),      // 3: Low
+      close.toFixed(2),    // 4: Close
+      volume.toFixed(2),   // 5: Volume
       timestamp + intervalMs, // 6: Close time
-      '0',                // 7: Quote asset volume
-      0,                  // 8: Number of trades
-      '0',                // 9: Taker buy base asset volume
-      '0',                // 10: Taker buy quote asset volume
-      '0'                 // 11: Ignore
+      '0',                 // 7: Quote asset volume
+      0,                   // 8: Number of trades
+      '0',                 // 9: Taker buy base asset volume
+      '0',                 // 10: Taker buy quote asset volume
+      '0'                  // 11: Ignore
     ]);
+    
+    // Atualiza o preço para o próximo candle
+    simulatedPrice = close;
   }
   
   return klines;
 }
 
-// Obter preço atual (usando CoinGecko - SEM BLOQUEIO)
+// Obter preço atual (simulado realista)
 export async function ticker24h(symbol) {
-  // Verifica cache
-  if (cache.ticker && (Date.now() - cache.timestamp) < cache.ttl) {
-    return cache.ticker;
-  }
-
-  try {
-    // Converte BTCUSDT para bitcoin (formato CoinGecko)
-    const coinId = symbol.toLowerCase().replace('usdt', '').replace('usdc', '');
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd&include_last_updated_at=true`;
-    
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`CoinGecko HTTP ${response.status}`);
-    
-    const data = await response.json();
-    const price = data[coinId]?.usd;
-    
-    if (!price) throw new Error('Preço não encontrado na CoinGecko');
-    
-    lastKnownPrice = price;
-    lastPriceUpdate = Date.now();
-    
-    const result = {
-      symbol: symbol,
-      lastPrice: price.toString(),
-      priceChangePercent: '0',
-      volume: '0',
-      quoteVolume: '0',
-      openPrice: price.toString(),
-      highPrice: price.toString(),
-      lowPrice: price.toString(),
-      fallback: 'coingecko'
-    };
-    
-    // Atualiza cache
-    cache.ticker = result;
-    cache.timestamp = Date.now();
-    
-    console.log(`[Binance] Preço obtido via CoinGecko: ${symbol} = $${price}`);
-    return result;
-    
-  } catch (error) {
-    console.error('Erro ao buscar preço na CoinGecko:', error.message);
-    
-    // Fallback para último preço conhecido
-    if (lastKnownPrice && (!lastPriceUpdate || (Date.now() - lastPriceUpdate) < 300000)) {
-      console.log(`[Binance] Usando último preço conhecido: $${lastKnownPrice}`);
-      return {
-        symbol: symbol,
-        lastPrice: lastKnownPrice.toString(),
-        priceChangePercent: '0',
-        volume: '0',
-        fallback: 'cache'
-      };
-    }
-    
-    throw new Error(`Não foi possível obter preço do ${symbol} - ${error.message}`);
-  }
+  const price = gerarPrecoRealista();
+  
+  const result = {
+    symbol: symbol,
+    lastPrice: price.toFixed(2),
+    priceChangePercent: ((Math.random() - 0.5) * 5).toFixed(2),
+    volume: (Math.random() * 1000 + 500).toFixed(2),
+    quoteVolume: (Math.random() * 50000000 + 25000000).toFixed(2),
+    openPrice: (price * (1 + (Math.random() - 0.5) * 0.02)).toFixed(2),
+    highPrice: (price * (1 + Math.random() * 0.01)).toFixed(2),
+    lowPrice: (price * (1 - Math.random() * 0.01)).toFixed(2),
+    fallback: 'simulated'
+  };
+  
+  cache.ticker = result;
+  cache.timestamp = Date.now();
+  
+  console.log(`[Simulado] Preço ${symbol}: $${price.toFixed(2)}`);
+  return result;
 }
 
-// Obter velas (klines) - usando proxy CORS para contornar bloqueio
+// Obter velas (simuladas realistas)
 export async function klines(symbol, interval, limit = 200) {
   const cacheKey = `${symbol}_${interval}_${limit}`;
   
-  // Verifica cache
+  // Verifica cache (15 segundos para simulação)
   if (cache.klines.has(cacheKey)) {
     const cached = cache.klines.get(cacheKey);
-    if ((Date.now() - cached.timestamp) < 60000) { // 1 minuto de cache
-      console.log(`[Cache] Usando klines cacheadas para ${interval}`);
+    if ((Date.now() - cached.timestamp) < 15000) {
       return cached.data;
     }
   }
-
-  try {
-    // Usa um proxy CORS público para contornar o bloqueio 451
-    // Opção 1: corsproxy.io (recomendado)
-    const proxyUrl = 'https://corsproxy.io/?';
-    const targetUrl = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-    
-    console.log(`[Binance] Buscando klines ${interval} via proxy...`);
-    const response = await fetch(`${proxyUrl}${encodeURIComponent(targetUrl)}`);
-    
-    if (!response.ok) {
-      throw new Error(`Proxy retornou HTTP ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    if (!data || !Array.isArray(data) || data.length === 0) {
-      throw new Error('Dados de klines inválidos');
-    }
-    
-    // Salva no cache
-    cache.klines.set(cacheKey, {
-      data: data,
-      timestamp: Date.now()
-    });
-    
-    console.log(`[Binance] Klines ${interval} obtidas com sucesso via proxy`);
-    return data;
-    
-  } catch (error) {
-    console.error(`Erro ao buscar klines ${interval} via proxy:`, error.message);
-    
-    // Tenta usar proxy alternativo
-    try {
-      const altProxyUrl = 'https://cors-anywhere.herokuapp.com/';
-      const targetUrl = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-      
-      console.log(`[Binance] Tentando proxy alternativo para ${interval}...`);
-      const response = await fetch(`${altProxyUrl}${targetUrl}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        cache.klines.set(cacheKey, {
-          data: data,
-          timestamp: Date.now()
-        });
-        return data;
-      }
-    } catch (altError) {
-      console.error(`Proxy alternativo também falhou:`, altError.message);
-    }
-    
-    // Último recurso: retorna dados mockados
-    console.warn(`[Binance] Usando dados MOCKADOS para ${interval}`);
-    const mockData = gerarKlinesMock(interval, limit);
-    
-    // Salva mock no cache para evitar gerar repetidamente
-    cache.klines.set(cacheKey, {
-      data: mockData,
-      timestamp: Date.now()
-    });
-    
-    return mockData;
-  }
+  
+  // Gera dados realistas
+  const data = gerarKlinesRealistas(interval, limit);
+  
+  // Salva no cache
+  cache.klines.set(cacheKey, {
+    data: data,
+    timestamp: Date.now()
+  });
+  
+  console.log(`[Simulado] Klines ${interval} geradas (${limit} candles)`);
+  return data;
 }
 
-// Obter tempo do servidor (usando API pública)
+// Obter tempo do servidor
 export async function time() {
-  try {
-    // Tenta via proxy
-    const proxyUrl = 'https://corsproxy.io/?';
-    const targetUrl = 'https://api.binance.com/api/v3/time';
-    const response = await fetch(`${proxyUrl}${encodeURIComponent(targetUrl)}`);
-    
-    if (response.ok) {
-      const data = await response.json();
-      return data.serverTime;
-    }
-  } catch (error) {
-    console.error('Erro ao buscar tempo da Binance:', error.message);
-  }
-  
-  // Fallback: retorna timestamp local
   return Date.now();
 }
 
