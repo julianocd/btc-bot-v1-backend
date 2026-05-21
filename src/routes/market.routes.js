@@ -111,14 +111,14 @@ function getTradeAction(signal) {
     signal.bias === 'WATCHLIST_SELL'
   ) {
     return {
-      tradeAction: '⏳ ESPERE CONFIRMAÇÃO',
+      tradeAction: '⚠️ ESPERE CONFIRMAÇÃO',
       recommendationType: 'WAIT_CONFIRMATION',
       recommendationLabel: 'Espere confirmação'
     };
   }
 
   return {
-    tradeAction: '⚠️ ESPERE TENDÊNCIA',
+    tradeAction: '⚪ ESPERE TENDÊNCIA',
     recommendationType: 'WAIT_CONFIRMATION',
     recommendationLabel: 'Espere confirmação'
   };
@@ -190,6 +190,7 @@ router.get('/alerts', async (_req, res) => {
     });
   }
 });
+
 router.post('/test-telegram', async (_req, res) => {
   try {
     const message = `🔔 Teste de alerta BTC Bot
@@ -230,7 +231,7 @@ router.post('/alert-signal', async (_req, res) => {
       dataSource: ticker?.fallback || 'binance'
     };
 
-    const ALERT_STATE_FILE = './alert-state.json';
+    const ALERT_STATE_FILE = path.resolve(__dirname, '../../alert-state.json');
 
     try {
       const data = await readFile(ALERT_STATE_FILE, 'utf8');
@@ -246,7 +247,6 @@ router.post('/alert-signal', async (_req, res) => {
 
       if (!changed) {
         await writeFile(ALERT_STATE_FILE, JSON.stringify(enrichedSignal, null, 2));
-
         return res.json({
           ok: true,
           sent: false,
@@ -325,6 +325,27 @@ router.post('/alert-signal', async (_req, res) => {
       ok: false,
       error: error.message
     });
+  }
+});
+
+// ============================================
+// NOVO ENDPOINT PARA CRON-JOB.ORG
+// Retorna apenas "ok" para não estourar o limite de tamanho.
+// O sinal é gerado em segundo plano.
+// ============================================
+router.get('/cron-ping', async (_req, res) => {
+  try {
+    // Dispara a geração do sinal em segundo plano (sem travar a resposta)
+    const port = process.env.PORT || 10000;
+    fetch(`http://localhost:${port}/market/alert-signal`, { method: 'POST' }).catch(e =>
+      console.error('Erro ao chamar alert-signal em background:', e.message)
+    );
+
+    // Resposta mínima que o cron-job.org aceita
+    res.status(200).send('ok');
+  } catch (error) {
+    console.error('Erro no cron-ping:', error.message);
+    res.status(500).send('error');
   }
 });
 
