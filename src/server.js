@@ -8,7 +8,7 @@ import cron from 'node-cron';
 import marketRoutes from './routes/market.routes.js';
 
 dotenv.config();
-
+console.log('📌 TELEGRAM_BOT_TOKEN presente?', !!process.env.TELEGRAM_BOT_TOKEN);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
