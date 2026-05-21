@@ -8,7 +8,7 @@ import cron from 'node-cron';
 import marketRoutes from './routes/market.routes.js';
 
 dotenv.config();
-console.log('📌 TELEGRAM_BOT_TOKEN presente?', !!process.env.TELEGRAM_BOT_TOKEN);
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -38,7 +38,7 @@ app.use(express.static(publicPath, {
   }
 }));
 
-// Health check endpoint
+// Health check
 app.get('/health', (req, res) => {
   try {
     const alertPath = path.resolve(__dirname, '../alert-state.json');
@@ -55,9 +55,8 @@ app.get('/health', (req, res) => {
       });
     }
   } catch (error) {
-    // Ignora erro
+    // ignora
   }
-  
   return res.json({
     ok: true,
     service: 'btc-bot-v1-backend',
@@ -76,7 +75,7 @@ app.get('/', (req, res) => {
 });
 
 // ============================================
-// CRON JOB: Atualiza sinais automaticamente a cada 5 minutos
+// CRON JOB: atualiza sinais a cada 5 minutos
 // ============================================
 cron.schedule('*/5 * * * *', async () => {
   console.log(`[CRON] 🔄 Atualizando sinais automaticamente... ${new Date().toLocaleString()}`);
@@ -86,7 +85,6 @@ cron.schedule('*/5 * * * *', async () => {
       headers: { 'Content-Type': 'application/json' }
     });
     const data = await response.json();
-    
     if (data.sent) {
       console.log('[CRON] ✅ Alerta enviado para Telegram!');
     } else if (data.signal) {
