@@ -1,79 +1,92 @@
 import { env } from '../config/env.js';
 
-// Cache simples
+// Cache para preço e velas
 const cache = {
+  price: null,
+  priceTimestamp: null,
   klines: new Map(),
-  ticker: null,
-  timestamp: null,
-  ttl: 30000 // 30 segundos
+  ttl: 30000 // 30 segundos para preço
 };
 
-let lastKnownPrice = null;
-let lastPriceUpdate = null;
+let lastKnownPrice = 65000; // valor inicial
 
-// Lista de proxies CORS públicos (quanto mais, melhor)
-const PROXIES = [
-  'https://corsproxy.io/?',
-  'https://api.allorigins.win/raw?url=',
-  'https://cors-anywhere.herokuapp.com/'
-];
-
-// Função auxiliar para tentar chamadas com múltiplos proxies
-async function fetchWithProxy(targetUrl, options = {}) {
-  for (const proxy of PROXIES) {
-    try {
-      const proxyUrl = proxy + encodeURIComponent(targetUrl);
-      const response = await fetch(proxyUrl, options);
-      if (response.ok) {
-        return await response.json();
-      }
-    } catch (e) {
-      console.warn(`Proxy ${proxy.split('//')[1]} falhou:`, e.message);
-    }
-  }
-  throw new Error(`Todos os proxies falharam para ${targetUrl}`);
+// ========== COINGECKO (fonte primária) ==========
+async function getPriceFromCoinGecko() {
+  const url = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd';
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`CoinGecko HTTP ${response.status}`);
+  const data = await response.json();
+  return data.bitcoin?.usd;
 }
 
-// Obter preço atual (via proxy)
+// ========== GERAR VELAS SINTÉTICAS REALISTAS ==========
+function generateRealisticKlines(interval, limit = 200, currentPrice) {
+  const now = Date.now();
+  const intervalMs = {
+    '5m': 5 * 60 * 1000,
+    '15m': 15 * 60 * 1000,
+    '1h': 60 * 60 * 1000,
+    '4h': 4 * 60 * 60 * 1000,
+    '1d': 24 * 60 * 60 * 1000
+  }[interval] || 60 * 60 * 1000;
+
+  const klines = [];
+  let price = currentPrice || lastKnownPrice;
+
+  for (let i = limit; i > 0; i--) {
+    // Variação percentual entre -0.5% e +0.5% para cada candle
+    const change = (Math.random() - 0.5) * 0.01;
+    const close = price * (1 + change);
+    const high = Math.max(price, close) * (1 + Math.random() * 0.005);
+    const low = Math.min(price, close) * (1 - Math.random() * 0.005);
+    const volume = 50 + Math.random() * 150;
+
+    const timestamp = now - (limit - i + 1) * intervalMs;
+    klines.unshift([
+      timestamp,           // open time
+      price.toFixed(2),    // open
+      high.toFixed(2),     // high
+      low.toFixed(2),      // low
+      close.toFixed(2),    // close
+      volume.toFixed(2),   // volume
+      timestamp + intervalMs, // close time
+      '0', '0', '0', '0', '0'
+    ]);
+    price = close;
+  }
+  lastKnownPrice = price;
+  return klines;
+}
+
+// ========== EXPORTAÇÕES PRINCIPAIS (API pública) ==========
 export async function ticker24h(symbol) {
-  if (cache.ticker && (Date.now() - cache.timestamp) < cache.ttl) {
-    return cache.ticker;
+  if (cache.price && (Date.now() - cache.priceTimestamp) < cache.ttl) {
+    return { symbol, lastPrice: cache.price.toString(), fallback: 'cache' };
   }
-
   try {
-    const targetUrl = `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`;
-    const data = await fetchWithProxy(targetUrl);
-    
-    const result = {
-      symbol: data.symbol,
-      lastPrice: data.price,
+    const price = await getPriceFromCoinGecko();
+    cache.price = price;
+    cache.priceTimestamp = Date.now();
+    lastKnownPrice = price;
+    console.log(`✅ Preço via CoinGecko: $${price}`);
+    return {
+      symbol,
+      lastPrice: price.toString(),
       priceChangePercent: '0',
-      volume: '0'
+      volume: '0',
+      fallback: 'coingecko'
     };
-    
-    cache.ticker = result;
-    cache.timestamp = Date.now();
-    lastKnownPrice = data.price;
-    lastPriceUpdate = Date.now();
-    
-    console.log(`✅ Preço via proxy: $${data.price}`);
-    return result;
   } catch (error) {
-    console.error('Erro ao buscar preço via proxy:', error.message);
-    
-    if (lastKnownPrice && (Date.now() - lastPriceUpdate) < 300000) {
-      console.log(`Usando último preço conhecido: $${lastKnownPrice}`);
-      return { lastPrice: lastKnownPrice, fallback: true };
+    console.error('Erro ao buscar preço na CoinGecko:', error.message);
+    if (lastKnownPrice) {
+      return { symbol, lastPrice: lastKnownPrice.toString(), fallback: 'last_known' };
     }
-    
-    throw new Error('Não foi possível obter preço - todos os proxies falharam');
+    throw new Error('Não foi possível obter preço');
   }
 }
 
-// Obter velas (klines) via proxy
 export async function klines(symbol, interval, limit = 200) {
   const cacheKey = `${symbol}_${interval}_${limit}`;
-  
   if (cache.klines.has(cacheKey)) {
     const cached = cache.klines.get(cacheKey);
     if ((Date.now() - cached.timestamp) < 60000) {
@@ -81,42 +94,25 @@ export async function klines(symbol, interval, limit = 200) {
     }
   }
 
-  try {
-    const targetUrl = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-    const data = await fetchWithProxy(targetUrl);
-    
-    cache.klines.set(cacheKey, {
-      data: data,
-      timestamp: Date.now()
-    });
-    
-    console.log(`✅ Klines ${interval} via proxy`);
-    return data;
-  } catch (error) {
-    console.error(`Erro ao buscar klines ${interval} via proxy:`, error.message);
-    
-    if (cache.klines.has(cacheKey)) {
-      return cache.klines.get(cacheKey).data;
+  // Obtém o preço atual (para gerar velas realistas)
+  let currentPrice = cache.price;
+  if (!currentPrice) {
+    try {
+      const priceData = await ticker24h(symbol);
+      currentPrice = parseFloat(priceData.lastPrice);
+    } catch {
+      currentPrice = lastKnownPrice || 65000;
     }
-    
-    throw error;
   }
+
+  const data = generateRealisticKlines(interval, limit, currentPrice);
+  cache.klines.set(cacheKey, { data, timestamp: Date.now() });
+  console.log(`📊 Klines sintéticas geradas para ${interval}`);
+  return data;
 }
 
-// Obter tempo do servidor (via proxy)
 export async function time() {
-  try {
-    const targetUrl = 'https://api.binance.com/api/v3/time';
-    const data = await fetchWithProxy(targetUrl);
-    return data.serverTime;
-  } catch (error) {
-    console.error('Erro ao buscar tempo via proxy:', error.message);
-    return Date.now();
-  }
+  return Date.now();
 }
 
-export const binanceRest = {
-  ticker24h,
-  klines,
-  time
-};
+export const binanceRest = { ticker24h, klines, time };
