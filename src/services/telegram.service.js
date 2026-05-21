@@ -1,6 +1,9 @@
 import { env } from '../config/env.js';
 
 export async function sendTelegramMessage(message) {
+  console.log('🔍 Token carregado?', !!env.telegramBotToken);
+  console.log('🔍 ChatId carregado?', !!env.telegramChatId);
+  
   const token = env.telegramBotToken;
   const chatId = env.telegramChatId;
   
